@@ -40,14 +40,18 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Copy gtfs-sqljs build
+      - name: Copy gtfs-sqljs build and WASM file
         run: |
           cp -r /tmp/gtfs-sqljs/dist node_modules/gtfs-sqljs/
-
-      - name: Copy SQL.js WASM file
-        run: |
           mkdir -p public
-          cp node_modules/gtfs-sqljs/node_modules/sql.js/dist/sql-wasm.wasm public/
+          WASM_FILE=$(find /tmp/gtfs-sqljs/node_modules -name "sql-wasm.wasm" | head -1)
+          if [ -f "$WASM_FILE" ]; then
+            cp "$WASM_FILE" public/
+            echo "Copied WASM file from: $WASM_FILE"
+          else
+            echo "Error: sql-wasm.wasm not found in /tmp/gtfs-sqljs"
+            exit 1
+          fi
 
       - name: Build
         run: npm run build
