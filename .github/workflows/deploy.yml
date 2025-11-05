@@ -32,6 +32,20 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Verify gtfs-sqljs installation
+        run: |
+          echo "Checking gtfs-sqljs installation..."
+          ls -la node_modules/gtfs-sqljs/
+          if [ ! -d "node_modules/gtfs-sqljs/dist" ]; then
+            echo "dist folder not found, running prepare script..."
+            cd node_modules/gtfs-sqljs
+            npm install
+            npm run prepare || npm run build
+            cd ../..
+          fi
+          echo "gtfs-sqljs dist contents:"
+          ls -la node_modules/gtfs-sqljs/dist/ || echo "dist folder still missing"
+
       - name: Copy SQL.js WASM file
         run: |
           mkdir -p public
