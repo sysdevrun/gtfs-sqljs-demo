@@ -29,14 +29,20 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
+      - name: Build gtfs-sqljs separately
+        run: |
+          cd /tmp
+          git clone https://github.com/sysdevrun/gtfs-sqljs.git
+          cd gtfs-sqljs
+          npm install
+          npm run build
+
       - name: Install dependencies
         run: npm ci
 
-      - name: Build gtfs-sqljs
+      - name: Copy gtfs-sqljs build
         run: |
-          cd node_modules/gtfs-sqljs
-          npm install
-          npm run build
+          cp -r /tmp/gtfs-sqljs/dist node_modules/gtfs-sqljs/
 
       - name: Build
         run: npm run build
