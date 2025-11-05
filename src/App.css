@@ -1,0 +1,132 @@
+.app {
+  padding: 20px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+header {
+  text-align: center;
+  margin-bottom: 2em;
+}
+
+.config-panel {
+  background-color: rgba(255, 255, 255, 0.05);
+  padding: 1em;
+  border-radius: 8px;
+  margin-bottom: 2em;
+}
+
+.config-row {
+  display: flex;
+  gap: 1em;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.config-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+  flex: 1;
+  min-width: 300px;
+}
+
+.config-row input {
+  width: 100%;
+}
+
+.error {
+  color: #ff4444;
+  margin-top: 1em;
+  padding: 0.5em;
+  background-color: rgba(255, 68, 68, 0.1);
+  border-radius: 4px;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 2em;
+}
+
+.section {
+  background-color: rgba(255, 255, 255, 0.05);
+  padding: 1.5em;
+  border-radius: 8px;
+}
+
+.section h2 {
+  margin-top: 0;
+  margin-bottom: 1em;
+}
+
+.section h3 {
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+}
+
+.agencies {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+}
+
+.agency-item {
+  padding: 0.5em;
+  background-color: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+}
+
+.routes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+}
+
+.route-item {
+  transition: transform 0.2s;
+}
+
+.route-item:hover {
+  transform: scale(1.05);
+}
+
+.route-item.selected {
+  box-shadow: 0 0 10px rgba(100, 108, 255, 0.5);
+}
+
+.trips-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.trip-item {
+  transition: background-color 0.2s;
+}
+
+.trip-item:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.trip-item.selected {
+  background-color: rgba(100, 108, 255, 0.2);
+}
+
+table {
+  font-size: 0.9em;
+}
+
+@media (max-width: 768px) {
+  .config-row {
+    flex-direction: column;
+  }
+
+  .config-row label {
+    width: 100%;
+  }
+
+  .routes-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  }
+}
