@@ -37,7 +37,14 @@ function App() {
 
       const instance = await GtfsSqlJs.fromZip(proxiedGtfsUrl, {
         realtimeFeedUrls: [proxiedRtUrl],
-        stalenessThreshold: 120
+        stalenessThreshold: 120,
+        locateFile: (filename: string) => {
+          // Handle WASM file location for GitHub Pages with base path
+          if (filename.endsWith('.wasm')) {
+            return import.meta.env.BASE_URL + filename
+          }
+          return filename
+        }
       })
 
       setGtfs(instance)

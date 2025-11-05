@@ -44,6 +44,11 @@ jobs:
         run: |
           cp -r /tmp/gtfs-sqljs/dist node_modules/gtfs-sqljs/
 
+      - name: Copy SQL.js WASM file
+        run: |
+          mkdir -p public
+          cp node_modules/gtfs-sqljs/node_modules/sql.js/dist/sql-wasm.wasm public/
+
       - name: Build
         run: npm run build
 
