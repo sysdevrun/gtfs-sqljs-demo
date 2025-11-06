@@ -37,6 +37,7 @@ function App() {
       const instance = await GtfsSqlJs.fromZip(proxiedGtfsUrl, {
         realtimeFeedUrls: [proxiedRtUrl],
         stalenessThreshold: 120,
+        skipFiles: ['shapes.txt'],
         locateFile: (filename: string) => {
           if (filename.endsWith('.wasm')) {
             return import.meta.env.BASE_URL + filename
