@@ -74,11 +74,28 @@ function App() {
       setAlerts(alertsData)
 
       const vehiclesData = instance.getVehiclePositions()
-      setVehicles(vehiclesData)
+      // Sort vehicles by route sort order
+      const sortedVehicles = vehiclesData.sort((a: any, b: any) => {
+        const aRouteId = a.vehicle?.trip?.routeId
+        const bRouteId = b.vehicle?.trip?.routeId
+        const aRoute = aRouteId ? routes.find((r: any) => r.route_id === aRouteId) : null
+        const bRoute = bRouteId ? routes.find((r: any) => r.route_id === bRouteId) : null
+
+        const aSort = aRoute?.route_sort_order ?? 9999
+        const bSort = bRoute?.route_sort_order ?? 9999
+
+        if (aSort !== bSort) return aSort - bSort
+
+        // If same route or no route, sort by vehicle ID
+        const aVehicleId = a.vehicle?.vehicle?.id || ''
+        const bVehicleId = b.vehicle?.vehicle?.id || ''
+        return aVehicleId.localeCompare(bVehicleId)
+      })
+      setVehicles(sortedVehicles)
     } catch (err) {
       console.error('Error updating realtime data:', err)
     }
-  }, [])
+  }, [routes])
 
   useEffect(() => {
     loadGtfs()
@@ -183,6 +200,30 @@ function App() {
     return grouped
   }
 
+  const getTripVehicle = (tripId: string) => {
+    return vehicles.find((v: any) => v.vehicle?.trip?.tripId === tripId)
+  }
+
+  const downloadDatabase = async () => {
+    if (!gtfs) return
+    try {
+      const db = gtfs.getDatabase()
+      const dbBuffer = db.export()
+      const blob = new Blob([dbBuffer], { type: 'application/x-sqlite3' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `gtfs-${new Date().toISOString().slice(0, 10)}.db`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('Error downloading database:', err)
+      alert('Failed to download database')
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
       {/* Header */}
@@ -223,7 +264,7 @@ function App() {
               />
             </div>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
             <button
               onClick={loadGtfs}
               disabled={loading}
@@ -241,6 +282,14 @@ function App() {
             >
               {autoRefresh ? '✓ Auto-Refresh' : 'Auto-Refresh Off'}
             </button>
+            {gtfs && (
+              <button
+                onClick={downloadDatabase}
+                className="px-6 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-colors"
+              >
+                Download Database
+              </button>
+            )}
           </div>
           {error && (
             <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
@@ -321,24 +370,30 @@ function App() {
                       Direction {directionId}
                     </h3>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
-                      {(dirTrips as any[]).map((trip: any) => (
-                        <button
-                          key={trip.trip_id}
-                          onClick={() => setSelectedTrip(trip.trip_id)}
-                          className={`p-3 rounded-lg text-sm font-medium transition-all hover:shadow-md ${
-                            selectedTrip === trip.trip_id
-                              ? 'bg-blue-600 text-white shadow-lg'
-                              : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
-                          }`}
-                        >
-                          <div>{trip.trip_short_name || trip.trip_id}</div>
-                          {trip.trip_headsign && (
-                            <div className="text-xs mt-1 opacity-80 truncate">
-                              {trip.trip_headsign}
-                            </div>
-                          )}
-                        </button>
-                      ))}
+                      {(dirTrips as any[]).map((trip: any) => {
+                        const vehicleOnTrip = getTripVehicle(trip.trip_id)
+                        return (
+                          <button
+                            key={trip.trip_id}
+                            onClick={() => setSelectedTrip(trip.trip_id)}
+                            className={`p-3 rounded-lg text-sm font-medium transition-all hover:shadow-md relative ${
+                              selectedTrip === trip.trip_id
+                                ? 'bg-blue-600 text-white shadow-lg'
+                                : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                            }`}
+                          >
+                            {vehicleOnTrip && (
+                              <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
+                            )}
+                            <div>{trip.trip_short_name || trip.trip_id}</div>
+                            {trip.trip_headsign && (
+                              <div className="text-xs mt-1 opacity-80 truncate">
+                                {trip.trip_headsign}
+                              </div>
+                            )}
+                          </button>
+                        )
+                      })}
                     </div>
                   </div>
                 ))}
@@ -497,6 +552,9 @@ function App() {
                           Route
                         </th>
                         <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">
+                          Trip
+                        </th>
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">
                           Position
                         </th>
                         <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">
@@ -509,21 +567,37 @@ function App() {
                     </thead>
                     <tbody>
                       {vehicles.map((vehicle: any, idx: number) => {
-                        const route = getRouteById(vehicle.trip?.route_id)
-                        const currentStop = vehicle.stop_id ? getStopById(vehicle.stop_id) : null
+                        // Fix: Use the correct GTFS-RT structure
+                        const routeId = vehicle.vehicle?.trip?.routeId
+                        const tripId = vehicle.vehicle?.trip?.tripId
+                        const vehicleInfo = vehicle.vehicle?.vehicle
+                        const position = vehicle.vehicle?.position
+                        const stopId = vehicle.vehicle?.stopId
+                        const currentStatus = vehicle.vehicle?.currentStatus
+
+                        const route = routeId ? getRouteById(routeId) : null
+                        const currentStop = stopId ? getStopById(stopId) : null
+                        const trip = tripId ? trips.find((t: any) => t.trip_id === tripId) : null
 
                         return (
                           <tr
-                            key={vehicle.vehicle?.id || vehicle.trip?.trip_id || idx}
+                            key={vehicleInfo?.id || idx}
                             className={`border-b border-gray-100 hover:bg-green-50 transition-colors ${
                               idx % 2 === 0 ? 'bg-gray-50' : 'bg-white'
                             }`}
                           >
-                            <td className="py-3 px-4 text-sm font-medium text-gray-900">
-                              {vehicle.vehicle?.id || 'N/A'}
+                            <td className="py-3 px-4 text-sm">
+                              <div className="font-medium text-gray-900">
+                                {vehicleInfo?.label || vehicleInfo?.id || 'N/A'}
+                              </div>
+                              {vehicleInfo?.licensePlate && (
+                                <div className="text-xs text-gray-500 mt-1">
+                                  {vehicleInfo.licensePlate}
+                                </div>
+                              )}
                             </td>
                             <td className="py-3 px-4">
-                              {route && (
+                              {route ? (
                                 <span
                                   style={{
                                     backgroundColor: route.route_color
@@ -539,27 +613,43 @@ function App() {
                                 >
                                   {route.route_short_name}
                                 </span>
+                              ) : (
+                                <span className="text-gray-400 text-sm">-</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 text-sm text-gray-700">
+                              {trip ? (
+                                <div>
+                                  <div className="font-medium">
+                                    {trip.trip_short_name || tripId}
+                                  </div>
+                                  {trip.trip_headsign && (
+                                    <div className="text-xs text-gray-500 truncate max-w-xs">
+                                      {trip.trip_headsign}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : tripId ? (
+                                <div className="text-xs text-gray-500">{tripId}</div>
+                              ) : (
+                                <span className="text-gray-400">-</span>
                               )}
                             </td>
                             <td className="py-3 px-4 text-xs font-mono text-gray-700">
-                              <div>
-                                Lat: {vehicle.position?.latitude?.toFixed(6) || 'N/A'}
-                              </div>
-                              <div>
-                                Lng: {vehicle.position?.longitude?.toFixed(6) || 'N/A'}
-                              </div>
+                              <div>Lat: {position?.latitude?.toFixed(6) || 'N/A'}</div>
+                              <div>Lng: {position?.longitude?.toFixed(6) || 'N/A'}</div>
                             </td>
                             <td className="py-3 px-4">
                               <span
                                 className={`px-3 py-1 rounded-full text-xs font-medium ${getVehicleStatusColor(
-                                  vehicle.current_status
+                                  currentStatus
                                 )}`}
                               >
-                                {getVehicleStatus(vehicle.current_status)}
+                                {getVehicleStatus(currentStatus)}
                               </span>
                             </td>
                             <td className="py-3 px-4 text-sm text-gray-700">
-                              {currentStop?.stop_name || vehicle.stop_id || 'N/A'}
+                              {currentStop?.stop_name || stopId || 'N/A'}
                             </td>
                           </tr>
                         )
