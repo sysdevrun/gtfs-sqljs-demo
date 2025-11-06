@@ -170,6 +170,43 @@ function App() {
     return new Date(timestamp * 1000).toLocaleString()
   }
 
+  const applyDelayToTime = (timeString: string, delaySeconds?: number) => {
+    if (!delaySeconds) return timeString
+
+    // Parse HH:MM:SS format (can have hours >= 24 for next-day times)
+    const [hours, minutes, seconds] = timeString.split(':').map(Number)
+    let totalSeconds = hours * 3600 + minutes * 60 + seconds + delaySeconds
+
+    // Handle negative times
+    if (totalSeconds < 0) totalSeconds = 0
+
+    const newHours = Math.floor(totalSeconds / 3600)
+    const newMinutes = Math.floor((totalSeconds % 3600) / 60)
+    const newSeconds = totalSeconds % 60
+
+    return `${String(newHours).padStart(2, '0')}:${String(newMinutes).padStart(2, '0')}:${String(newSeconds).padStart(2, '0')}`
+  }
+
+  const formatTimeWithRealtime = (scheduledTime: string, delay?: number) => {
+    if (!delay) {
+      return <span className="font-mono">{scheduledTime}</span>
+    }
+
+    const actualTime = applyDelayToTime(scheduledTime, delay)
+    const delayMinutes = Math.floor(Math.abs(delay) / 60)
+    const delaySign = delay > 0 ? '+' : '-'
+
+    return (
+      <div className="font-mono">
+        <div className="text-gray-900 font-semibold">{actualTime}</div>
+        <div className="text-xs text-gray-400 line-through">{scheduledTime}</div>
+        <div className={`text-xs font-medium ${delay > 0 ? 'text-red-600' : 'text-green-600'}`}>
+          {delaySign}{delayMinutes}min
+        </div>
+      </div>
+    )
+  }
+
   const getVehicleStatus = (status: number) => {
     switch (status) {
       case 0: return 'Incoming'
@@ -432,6 +469,7 @@ function App() {
                     <tbody>
                       {stopTimes.map((st: any, idx: number) => {
                         const stop = getStopById(st.stop_id)
+
                         return (
                           <tr
                             key={`${st.trip_id}-${st.stop_sequence}`}
@@ -445,11 +483,11 @@ function App() {
                             <td className="py-3 px-4 text-sm text-gray-900">
                               {stop?.stop_name || st.stop_id}
                             </td>
-                            <td className="py-3 px-4 text-sm text-gray-700 font-mono">
-                              {st.arrival_time}
+                            <td className="py-3 px-4 text-sm text-gray-700">
+                              {formatTimeWithRealtime(st.arrival_time, st.realtime?.arrival_delay)}
                             </td>
-                            <td className="py-3 px-4 text-sm text-gray-700 font-mono">
-                              {st.departure_time}
+                            <td className="py-3 px-4 text-sm text-gray-700">
+                              {formatTimeWithRealtime(st.departure_time, st.realtime?.departure_delay)}
                             </td>
                           </tr>
                         )
@@ -584,7 +622,7 @@ function App() {
 
                         const route = routeId ? getRouteById(routeId) : null
                         const currentStop = stopId ? getStopById(stopId) : null
-                        const trip = tripId ? trips.find((t: any) => t.trip_id === tripId) : null
+                        const trip = tripId && gtfs ? gtfs.getTripById(tripId) : null
 
                         return (
                           <tr
