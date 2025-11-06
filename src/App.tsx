@@ -74,10 +74,17 @@ function App() {
       setAlerts(alertsData)
 
       const vehiclesData = instance.getVehiclePositions()
+
+      // Debug: Log the first vehicle to see the structure
+      if (vehiclesData.length > 0) {
+        console.log('Sample vehicle data structure:', JSON.stringify(vehiclesData[0], null, 2))
+      }
+
       // Sort vehicles by route sort order
       const sortedVehicles = vehiclesData.sort((a: any, b: any) => {
-        const aRouteId = a.vehicle?.trip?.routeId
-        const bRouteId = b.vehicle?.trip?.routeId
+        // Try both possible structures
+        const aRouteId = a.trip?.routeId || a.trip?.route_id
+        const bRouteId = b.trip?.routeId || b.trip?.route_id
         const aRoute = aRouteId ? routes.find((r: any) => r.route_id === aRouteId) : null
         const bRoute = bRouteId ? routes.find((r: any) => r.route_id === bRouteId) : null
 
@@ -87,8 +94,8 @@ function App() {
         if (aSort !== bSort) return aSort - bSort
 
         // If same route or no route, sort by vehicle ID
-        const aVehicleId = a.vehicle?.vehicle?.id || ''
-        const bVehicleId = b.vehicle?.vehicle?.id || ''
+        const aVehicleId = a.vehicle?.id || a.id || ''
+        const bVehicleId = b.vehicle?.id || b.id || ''
         return aVehicleId.localeCompare(bVehicleId)
       })
       setVehicles(sortedVehicles)
@@ -201,7 +208,9 @@ function App() {
   }
 
   const getTripVehicle = (tripId: string) => {
-    return vehicles.find((v: any) => v.vehicle?.trip?.tripId === tripId)
+    return vehicles.find((v: any) =>
+      v.trip?.tripId === tripId || v.trip?.trip_id === tripId
+    )
   }
 
   const downloadDatabase = async () => {
@@ -567,13 +576,13 @@ function App() {
                     </thead>
                     <tbody>
                       {vehicles.map((vehicle: any, idx: number) => {
-                        // Fix: Use the correct GTFS-RT structure
-                        const routeId = vehicle.vehicle?.trip?.routeId
-                        const tripId = vehicle.vehicle?.trip?.tripId
-                        const vehicleInfo = vehicle.vehicle?.vehicle
-                        const position = vehicle.vehicle?.position
-                        const stopId = vehicle.vehicle?.stopId
-                        const currentStatus = vehicle.vehicle?.currentStatus
+                        // Handle both possible data structures from gtfs-sqljs
+                        const routeId = vehicle.trip?.routeId || vehicle.trip?.route_id
+                        const tripId = vehicle.trip?.tripId || vehicle.trip?.trip_id
+                        const vehicleInfo = vehicle.vehicle
+                        const position = vehicle.position
+                        const stopId = vehicle.stopId || vehicle.stop_id
+                        const currentStatus = vehicle.currentStatus ?? vehicle.current_status
 
                         const route = routeId ? getRouteById(routeId) : null
                         const currentStop = stopId ? getStopById(stopId) : null
