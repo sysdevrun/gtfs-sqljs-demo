@@ -1,5 +1,14 @@
 import { useState, useEffect, useCallback } from 'react'
-import { GtfsSqlJs } from 'gtfs-sqljs'
+import {
+  GtfsSqlJs,
+  Agency,
+  Route,
+  Trip,
+  StopTimeWithRealtime,
+  Alert,
+  VehiclePosition,
+  EntitySelector
+} from 'gtfs-sqljs'
 
 const PROXY_BASE = 'https://gtfs-proxy.sys-dev-run.re/proxy/'
 
@@ -17,14 +26,14 @@ function App() {
   const [autoRefresh, setAutoRefresh] = useState(true)
 
   // Data states
-  const [agencies, setAgencies] = useState<any[]>([])
-  const [routes, setRoutes] = useState<any[]>([])
+  const [agencies, setAgencies] = useState<Agency[]>([])
+  const [routes, setRoutes] = useState<Route[]>([])
   const [selectedRoute, setSelectedRoute] = useState<string | null>(null)
-  const [trips, setTrips] = useState<any[]>([])
+  const [trips, setTrips] = useState<Trip[]>([])
   const [selectedTrip, setSelectedTrip] = useState<string | null>(null)
-  const [stopTimes, setStopTimes] = useState<any[]>([])
-  const [alerts, setAlerts] = useState<any[]>([])
-  const [vehicles, setVehicles] = useState<any[]>([])
+  const [stopTimes, setStopTimes] = useState<StopTimeWithRealtime[]>([])
+  const [alerts, setAlerts] = useState<Alert[]>([])
+  const [vehicles, setVehicles] = useState<VehiclePosition[]>([])
 
   // Load GTFS data
   const loadGtfs = useCallback(async () => {
@@ -52,7 +61,7 @@ function App() {
       setAgencies(agenciesData)
 
       const routesData = instance.getRoutes()
-      const sortedRoutes = routesData.sort((a: any, b: any) => {
+      const sortedRoutes = routesData.sort((a: Route, b: Route) => {
         const aSort = a.route_sort_order ?? 9999
         const bSort = b.route_sort_order ?? 9999
         return aSort - bSort
@@ -63,8 +72,8 @@ function App() {
       updateRealtimeData(instance)
 
       setLoading(false)
-    } catch (err: any) {
-      setError(err.message || 'Failed to load GTFS data')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load GTFS data')
       setLoading(false)
     }
   }, [gtfsUrl, gtfsRtUrl])
@@ -82,11 +91,11 @@ function App() {
       }
 
       // Sort vehicles by route sort order
-      const sortedVehicles = vehiclesData.sort((a: any, b: any) => {
+      const sortedVehicles = vehiclesData.sort((a: VehiclePosition, b: VehiclePosition) => {
         const aRouteId = a.route_id
         const bRouteId = b.route_id
-        const aRoute = aRouteId ? routes.find((r: any) => r.route_id === aRouteId) : null
-        const bRoute = bRouteId ? routes.find((r: any) => r.route_id === bRouteId) : null
+        const aRoute = aRouteId ? routes.find((r: Route) => r.route_id === aRouteId) : null
+        const bRoute = bRouteId ? routes.find((r: Route) => r.route_id === bRouteId) : null
 
         const aSort = aRoute?.route_sort_order ?? 9999
         const bSort = bRoute?.route_sort_order ?? 9999
@@ -133,7 +142,7 @@ function App() {
       includeRealtime: true
     })
 
-    const sortedTrips = tripsData.sort((a: any, b: any) => {
+    const sortedTrips = tripsData.sort((a: Trip, b: Trip) => {
       const aName = a.trip_short_name || a.trip_id
       const bName = b.trip_short_name || b.trip_id
       return aName.localeCompare(bName)
@@ -165,9 +174,46 @@ function App() {
     return yiq >= 128 ? '#000000' : '#FFFFFF'
   }
 
-  const formatDate = (timestamp: number) => {
+  const formatDate = (timestamp?: number) => {
     if (!timestamp) return 'N/A'
     return new Date(timestamp * 1000).toLocaleString()
+  }
+
+  const applyDelayToTime = (timeString: string, delaySeconds?: number) => {
+    if (!delaySeconds) return timeString
+
+    // Parse HH:MM:SS format (can have hours >= 24 for next-day times)
+    const [hours, minutes, seconds] = timeString.split(':').map(Number)
+    let totalSeconds = hours * 3600 + minutes * 60 + seconds + delaySeconds
+
+    // Handle negative times
+    if (totalSeconds < 0) totalSeconds = 0
+
+    const newHours = Math.floor(totalSeconds / 3600)
+    const newMinutes = Math.floor((totalSeconds % 3600) / 60)
+    const newSeconds = totalSeconds % 60
+
+    return `${String(newHours).padStart(2, '0')}:${String(newMinutes).padStart(2, '0')}:${String(newSeconds).padStart(2, '0')}`
+  }
+
+  const formatTimeWithRealtime = (scheduledTime: string, delay?: number) => {
+    if (!delay) {
+      return <span className="font-mono">{scheduledTime}</span>
+    }
+
+    const actualTime = applyDelayToTime(scheduledTime, delay)
+    const delayMinutes = Math.floor(Math.abs(delay) / 60)
+    const delaySign = delay > 0 ? '+' : '-'
+
+    return (
+      <div className="font-mono">
+        <div className="text-gray-900 font-semibold">{actualTime}</div>
+        <div className="text-xs text-gray-400 line-through">{scheduledTime}</div>
+        <div className={`text-xs font-medium ${delay > 0 ? 'text-red-600' : 'text-green-600'}`}>
+          {delaySign}{delayMinutes}min
+        </div>
+      </div>
+    )
   }
 
   const getVehicleStatus = (status: number) => {
@@ -188,8 +234,8 @@ function App() {
     }
   }
 
-  const getRouteById = (routeId: string) => {
-    return routes.find((r: any) => r.route_id === routeId)
+  const getRouteById = (routeId: string): Route | undefined => {
+    return routes.find((r: Route) => r.route_id === routeId)
   }
 
   const getStopById = (stopId: string) => {
@@ -197,8 +243,8 @@ function App() {
     return gtfs.getStopById(stopId)
   }
 
-  const groupTripsByDirection = (trips: any[]) => {
-    const grouped: { [key: string]: any[] } = {}
+  const groupTripsByDirection = (trips: Trip[]) => {
+    const grouped: { [key: string]: Trip[] } = {}
     trips.forEach(trip => {
       const dirId = trip.direction_id ?? '0'
       if (!grouped[dirId]) grouped[dirId] = []
@@ -207,8 +253,8 @@ function App() {
     return grouped
   }
 
-  const getTripVehicle = (tripId: string) => {
-    return vehicles.find((v: any) => v.trip_id === tripId)
+  const getTripVehicle = (tripId: string): VehiclePosition | undefined => {
+    return vehicles.find((v: VehiclePosition) => v.trip_id === tripId)
   }
 
   const downloadDatabase = async () => {
@@ -311,7 +357,7 @@ function App() {
             <div className="bg-white rounded-xl shadow-md p-6 mb-8">
               <h2 className="text-xl font-semibold text-gray-800 mb-4">Agencies</h2>
               <div className="space-y-3">
-                {agencies.map((agency: any) => (
+                {agencies.map((agency: Agency) => (
                   <div
                     key={agency.agency_id}
                     className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-100"
@@ -336,7 +382,7 @@ function App() {
             <div className="bg-white rounded-xl shadow-md p-6 mb-8">
               <h2 className="text-xl font-semibold text-gray-800 mb-4">Routes</h2>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                {routes.map((route: any) => {
+                {routes.map((route: Route) => {
                   const bgColor = route.route_color ? `#${route.route_color}` : '#3b82f6'
                   const textColor = route.route_text_color
                     ? `#${route.route_text_color}`
@@ -377,7 +423,7 @@ function App() {
                       Direction {directionId}
                     </h3>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
-                      {(dirTrips as any[]).map((trip: any) => {
+                      {dirTrips.map((trip: Trip) => {
                         const vehicleOnTrip = getTripVehicle(trip.trip_id)
                         return (
                           <button
@@ -430,8 +476,9 @@ function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      {stopTimes.map((st: any, idx: number) => {
+                      {stopTimes.map((st: StopTimeWithRealtime, idx: number) => {
                         const stop = getStopById(st.stop_id)
+
                         return (
                           <tr
                             key={`${st.trip_id}-${st.stop_sequence}`}
@@ -445,11 +492,11 @@ function App() {
                             <td className="py-3 px-4 text-sm text-gray-900">
                               {stop?.stop_name || st.stop_id}
                             </td>
-                            <td className="py-3 px-4 text-sm text-gray-700 font-mono">
-                              {st.arrival_time}
+                            <td className="py-3 px-4 text-sm text-gray-700">
+                              {formatTimeWithRealtime(st.arrival_time, st.realtime?.arrival_delay)}
                             </td>
-                            <td className="py-3 px-4 text-sm text-gray-700 font-mono">
-                              {st.departure_time}
+                            <td className="py-3 px-4 text-sm text-gray-700">
+                              {formatTimeWithRealtime(st.departure_time, st.realtime?.departure_delay)}
                             </td>
                           </tr>
                         )
@@ -485,12 +532,12 @@ function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      {alerts.map((alert: any, idx: number) => {
+                      {alerts.map((alert: Alert, idx: number) => {
                         const affectedRoutes = alert.informed_entity
-                          ?.map((entity: any) => entity.route_id)
-                          .filter(Boolean)
+                          ?.map((entity: EntitySelector) => entity.route_id)
+                          .filter((routeId): routeId is string => Boolean(routeId))
                           .map((routeId: string) => getRouteById(routeId))
-                          .filter(Boolean) || []
+                          .filter((route): route is Route => Boolean(route)) || []
 
                         const activePeriod = alert.active_period?.[0]
 
@@ -509,7 +556,7 @@ function App() {
                             </td>
                             <td className="py-3 px-4">
                               <div className="flex flex-wrap gap-1">
-                                {affectedRoutes.map((route: any) => {
+                                {affectedRoutes.map((route: Route) => {
                                   const bgColor = route.route_color
                                     ? `#${route.route_color}`
                                     : '#3b82f6'
@@ -573,7 +620,7 @@ function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      {vehicles.map((vehicle: any, idx: number) => {
+                      {vehicles.map((vehicle: VehiclePosition, idx: number) => {
                         // Extract vehicle position properties
                         const routeId = vehicle.route_id
                         const tripId = vehicle.trip_id
@@ -584,7 +631,7 @@ function App() {
 
                         const route = routeId ? getRouteById(routeId) : null
                         const currentStop = stopId ? getStopById(stopId) : null
-                        const trip = tripId ? trips.find((t: any) => t.trip_id === tripId) : null
+                        const trip = tripId && gtfs ? gtfs.getTripById(tripId) : null
 
                         return (
                           <tr
@@ -597,9 +644,9 @@ function App() {
                               <div className="font-medium text-gray-900">
                                 {vehicleInfo?.label || vehicleInfo?.id || 'N/A'}
                               </div>
-                              {vehicleInfo?.licensePlate && (
+                              {vehicleInfo?.license_plate && (
                                 <div className="text-xs text-gray-500 mt-1">
-                                  {vehicleInfo.licensePlate}
+                                  {vehicleInfo.license_plate}
                                 </div>
                               )}
                             </td>
@@ -643,16 +690,16 @@ function App() {
                               )}
                             </td>
                             <td className="py-3 px-4 text-xs font-mono text-gray-700">
-                              <div>Lat: {position?.latitude?.toFixed(6) || 'N/A'}</div>
-                              <div>Lng: {position?.longitude?.toFixed(6) || 'N/A'}</div>
+                              <div>Lat: {position?.latitude != null ? position.latitude.toFixed(6) : 'N/A'}</div>
+                              <div>Lng: {position?.longitude != null ? position.longitude.toFixed(6) : 'N/A'}</div>
                             </td>
                             <td className="py-3 px-4">
                               <span
                                 className={`px-3 py-1 rounded-full text-xs font-medium ${getVehicleStatusColor(
-                                  currentStatus
+                                  currentStatus ?? 2
                                 )}`}
                               >
-                                {getVehicleStatus(currentStatus)}
+                                {getVehicleStatus(currentStatus ?? 2)}
                               </span>
                             </td>
                             <td className="py-3 px-4 text-sm text-gray-700">
