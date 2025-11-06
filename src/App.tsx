@@ -17,9 +17,33 @@ const proxyUrl = (url: string) => {
   return PROXY_BASE + parsed.host + parsed.pathname + parsed.search
 }
 
+interface PresetConfig {
+  name: string
+  gtfsUrl: string
+  gtfsRtUrls: string[]
+}
+
+const PRESETS: PresetConfig[] = [
+  {
+    name: 'Car Jaune',
+    gtfsUrl: 'https://pysae.com/api/v2/groups/car-jaune/gtfs/pub',
+    gtfsRtUrls: ['https://pysae.com/api/v2/groups/car-jaune/gtfs-rt']
+  },
+  {
+    name: 'Irigo',
+    gtfsUrl: 'https://chouette.enroute.mobi/api/v1/datas/Irigo/gtfs.zip',
+    gtfsRtUrls: [
+      'https://ara-api.enroute.mobi/irigo/gtfs/trip-updates',
+      'https://ara-api.enroute.mobi/irigo/gtfs/vehicle-positions',
+      'https://notify.ratpdev.com/api/networks/RD%20ANGERS/alerts/gtfsrt'
+    ]
+  }
+]
+
 function App() {
   const [gtfsUrl, setGtfsUrl] = useState('https://pysae.com/api/v2/groups/car-jaune/gtfs/pub')
-  const [gtfsRtUrl, setGtfsRtUrl] = useState('https://pysae.com/api/v2/groups/car-jaune/gtfs-rt')
+  const [gtfsRtUrls, setGtfsRtUrls] = useState<string[]>(['https://pysae.com/api/v2/groups/car-jaune/gtfs-rt'])
+  const [newRtUrl, setNewRtUrl] = useState('')
   const [gtfs, setGtfs] = useState<GtfsSqlJs | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -35,16 +59,35 @@ function App() {
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [vehicles, setVehicles] = useState<VehiclePosition[]>([])
 
+  // Load preset configuration
+  const loadPreset = (preset: PresetConfig) => {
+    setGtfsUrl(preset.gtfsUrl)
+    setGtfsRtUrls(preset.gtfsRtUrls)
+  }
+
+  // Add a new RT URL
+  const addRtUrl = () => {
+    if (newRtUrl.trim() && !gtfsRtUrls.includes(newRtUrl.trim())) {
+      setGtfsRtUrls([...gtfsRtUrls, newRtUrl.trim()])
+      setNewRtUrl('')
+    }
+  }
+
+  // Remove an RT URL
+  const removeRtUrl = (url: string) => {
+    setGtfsRtUrls(gtfsRtUrls.filter(u => u !== url))
+  }
+
   // Load GTFS data
   const loadGtfs = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
       const proxiedGtfsUrl = proxyUrl(gtfsUrl)
-      const proxiedRtUrl = proxyUrl(gtfsRtUrl)
+      const proxiedRtUrls = gtfsRtUrls.map(url => proxyUrl(url))
 
       const instance = await GtfsSqlJs.fromZip(proxiedGtfsUrl, {
-        realtimeFeedUrls: [proxiedRtUrl],
+        realtimeFeedUrls: proxiedRtUrls,
         stalenessThreshold: 120,
         skipFiles: ['shapes.txt'],
         locateFile: (filename: string) => {
@@ -76,7 +119,7 @@ function App() {
       setError(err instanceof Error ? err.message : 'Failed to load GTFS data')
       setLoading(false)
     }
-  }, [gtfsUrl, gtfsRtUrl])
+  }, [gtfsUrl, gtfsRtUrls])
 
   const updateRealtimeData = useCallback((instance: GtfsSqlJs) => {
     try {
@@ -291,32 +334,91 @@ function App() {
         {/* Configuration Panel */}
         <div className="bg-white rounded-xl shadow-md p-6 mb-8">
           <h2 className="text-xl font-semibold text-gray-800 mb-4">Configuration</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                GTFS URL
-              </label>
-              <input
-                type="text"
-                value={gtfsUrl}
-                onChange={(e) => setGtfsUrl(e.target.value)}
-                disabled={loading}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                GTFS-RT URL
-              </label>
-              <input
-                type="text"
-                value={gtfsRtUrl}
-                onChange={(e) => setGtfsRtUrl(e.target.value)}
-                disabled={loading}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-              />
+
+          {/* Preset Selection */}
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Quick Presets
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {PRESETS.map((preset) => (
+                <button
+                  key={preset.name}
+                  onClick={() => loadPreset(preset)}
+                  disabled={loading}
+                  className="px-4 py-2 bg-indigo-100 text-indigo-700 rounded-lg font-medium hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors"
+                >
+                  {preset.name}
+                </button>
+              ))}
             </div>
           </div>
+
+          {/* GTFS URL */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              GTFS URL
+            </label>
+            <input
+              type="text"
+              value={gtfsUrl}
+              onChange={(e) => setGtfsUrl(e.target.value)}
+              disabled={loading}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+            />
+          </div>
+
+          {/* GTFS-RT URLs */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              GTFS-RT URLs
+            </label>
+            <div className="space-y-2 mb-2">
+              {gtfsRtUrls.map((url, index) => (
+                <div key={index} className="flex gap-2">
+                  <input
+                    type="text"
+                    value={url}
+                    onChange={(e) => {
+                      const newUrls = [...gtfsRtUrls]
+                      newUrls[index] = e.target.value
+                      setGtfsRtUrls(newUrls)
+                    }}
+                    disabled={loading}
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  />
+                  <button
+                    onClick={() => removeRtUrl(url)}
+                    disabled={loading || gtfsRtUrls.length === 1}
+                    className="px-4 py-2 bg-red-100 text-red-700 rounded-lg font-medium hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors"
+                    title="Remove URL"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newRtUrl}
+                onChange={(e) => setNewRtUrl(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && addRtUrl()}
+                placeholder="Add new GTFS-RT URL..."
+                disabled={loading}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+              />
+              <button
+                onClick={addRtUrl}
+                disabled={loading || !newRtUrl.trim()}
+                className="px-4 py-2 bg-green-100 text-green-700 rounded-lg font-medium hover:bg-green-200 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                Add URL
+              </button>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
           <div className="flex flex-wrap gap-3">
             <button
               onClick={loadGtfs}
