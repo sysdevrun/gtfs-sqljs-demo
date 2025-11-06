@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
 import { GtfsSqlJs } from 'gtfs-sqljs'
-import './App.css'
 
 const PROXY_BASE = 'https://gtfs-proxy.sys-dev-run.re/proxy/'
 
@@ -39,7 +38,6 @@ function App() {
         realtimeFeedUrls: [proxiedRtUrl],
         stalenessThreshold: 120,
         locateFile: (filename: string) => {
-          // Handle WASM file location for GitHub Pages with base path
           if (filename.endsWith('.wasm')) {
             return import.meta.env.BASE_URL + filename
           }
@@ -49,12 +47,10 @@ function App() {
 
       setGtfs(instance)
 
-      // Load initial data
       const agenciesData = instance.getAgencies()
       setAgencies(agenciesData)
 
       const routesData = instance.getRoutes()
-      // Sort by route_sort_order
       const sortedRoutes = routesData.sort((a: any, b: any) => {
         const aSort = a.route_sort_order ?? 9999
         const bSort = b.route_sort_order ?? 9999
@@ -62,7 +58,6 @@ function App() {
       })
       setRoutes(sortedRoutes)
 
-      // Fetch realtime data
       await instance.fetchRealtimeData()
       updateRealtimeData(instance)
 
@@ -73,7 +68,6 @@ function App() {
     }
   }, [gtfsUrl, gtfsRtUrl])
 
-  // Update realtime data
   const updateRealtimeData = useCallback((instance: GtfsSqlJs) => {
     try {
       const alertsData = instance.getAlerts({ activeOnly: true })
@@ -86,12 +80,10 @@ function App() {
     }
   }, [])
 
-  // Load GTFS on mount
   useEffect(() => {
     loadGtfs()
   }, [])
 
-  // Auto-refresh realtime data every 10 seconds
   useEffect(() => {
     if (!gtfs || !autoRefresh) return
 
@@ -107,7 +99,6 @@ function App() {
     return () => clearInterval(interval)
   }, [gtfs, autoRefresh, updateRealtimeData])
 
-  // Load trips when route is selected
   useEffect(() => {
     if (!gtfs || !selectedRoute) return
 
@@ -118,7 +109,6 @@ function App() {
       includeRealtime: true
     })
 
-    // Sort by trip_short_name
     const sortedTrips = tripsData.sort((a: any, b: any) => {
       const aName = a.trip_short_name || a.trip_id
       const bName = b.trip_short_name || b.trip_id
@@ -130,7 +120,6 @@ function App() {
     setStopTimes([])
   }, [gtfs, selectedRoute])
 
-  // Load stop times when trip is selected
   useEffect(() => {
     if (!gtfs || !selectedTrip) return
 
@@ -159,10 +148,19 @@ function App() {
 
   const getVehicleStatus = (status: number) => {
     switch (status) {
-      case 0: return 'INCOMING_AT'
-      case 1: return 'STOPPED_AT'
-      case 2: return 'IN_TRANSIT_TO'
-      default: return 'UNKNOWN'
+      case 0: return 'Incoming'
+      case 1: return 'Stopped'
+      case 2: return 'In Transit'
+      default: return 'Unknown'
+    }
+  }
+
+  const getVehicleStatusColor = (status: number) => {
+    switch (status) {
+      case 0: return 'text-yellow-600 bg-yellow-50'
+      case 1: return 'text-red-600 bg-red-50'
+      case 2: return 'text-green-600 bg-green-50'
+      default: return 'text-gray-600 bg-gray-50'
     }
   }
 
@@ -186,256 +184,411 @@ function App() {
   }
 
   return (
-    <div className="app">
-      <header>
-        <h1>GTFS SQL.js Demo</h1>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+      {/* Header */}
+      <header className="bg-gradient-to-r from-blue-600 to-blue-700 shadow-lg">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <h1 className="text-3xl font-bold text-white">GTFS Real-Time Explorer</h1>
+          <p className="mt-2 text-blue-100">Explore transit data with gtfs-sqljs</p>
+        </div>
       </header>
 
-      <div className="config-panel">
-        <div className="config-row">
-          <label>
-            GTFS URL:
-            <input
-              type="text"
-              value={gtfsUrl}
-              onChange={(e) => setGtfsUrl(e.target.value)}
-              disabled={loading}
-            />
-          </label>
-          <label>
-            GTFS-RT URL:
-            <input
-              type="text"
-              value={gtfsRtUrl}
-              onChange={(e) => setGtfsRtUrl(e.target.value)}
-              disabled={loading}
-            />
-          </label>
-          <button onClick={loadGtfs} disabled={loading}>
-            {loading ? 'Loading...' : 'Reload'}
-          </button>
-          <button onClick={() => setAutoRefresh(!autoRefresh)}>
-            {autoRefresh ? 'Stop Auto-Refresh' : 'Start Auto-Refresh'}
-          </button>
-        </div>
-        {error && <div className="error">{error}</div>}
-      </div>
-
-      {gtfs && (
-        <div className="content">
-          <section className="section">
-            <h2>Agencies</h2>
-            <div className="agencies">
-              {agencies.map((agency: any) => (
-                <div key={agency.agency_id} className="agency-item">
-                  <strong>{agency.agency_name}</strong>
-                  {agency.agency_url && (
-                    <span> - <a href={agency.agency_url} target="_blank" rel="noopener noreferrer">Website</a></span>
-                  )}
-                </div>
-              ))}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Configuration Panel */}
+        <div className="bg-white rounded-xl shadow-md p-6 mb-8">
+          <h2 className="text-xl font-semibold text-gray-800 mb-4">Configuration</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                GTFS URL
+              </label>
+              <input
+                type="text"
+                value={gtfsUrl}
+                onChange={(e) => setGtfsUrl(e.target.value)}
+                disabled={loading}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+              />
             </div>
-          </section>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                GTFS-RT URL
+              </label>
+              <input
+                type="text"
+                value={gtfsRtUrl}
+                onChange={(e) => setGtfsRtUrl(e.target.value)}
+                disabled={loading}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+              />
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <button
+              onClick={loadGtfs}
+              disabled={loading}
+              className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+            >
+              {loading ? 'Loading...' : 'Reload'}
+            </button>
+            <button
+              onClick={() => setAutoRefresh(!autoRefresh)}
+              className={`px-6 py-2 rounded-lg font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors ${
+                autoRefresh
+                  ? 'bg-green-600 text-white hover:bg-green-700 focus:ring-green-500'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300 focus:ring-gray-500'
+              }`}
+            >
+              {autoRefresh ? '✓ Auto-Refresh' : 'Auto-Refresh Off'}
+            </button>
+          </div>
+          {error && (
+            <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-red-800 text-sm">{error}</p>
+            </div>
+          )}
+        </div>
 
-          <section className="section">
-            <h2>Routes</h2>
-            <div className="routes-grid">
-              {routes.map((route: any) => {
-                const bgColor = route.route_color ? `#${route.route_color}` : '#333333'
-                const textColor = route.route_text_color ? `#${route.route_text_color}` : getContrastColor(bgColor)
-
-                return (
+        {gtfs && (
+          <>
+            {/* Agencies */}
+            <div className="bg-white rounded-xl shadow-md p-6 mb-8">
+              <h2 className="text-xl font-semibold text-gray-800 mb-4">Agencies</h2>
+              <div className="space-y-3">
+                {agencies.map((agency: any) => (
                   <div
-                    key={route.route_id}
-                    className={`route-item ${selectedRoute === route.route_id ? 'selected' : ''}`}
-                    onClick={() => setSelectedRoute(route.route_id)}
-                    style={{
-                      backgroundColor: bgColor,
-                      color: textColor,
-                      cursor: 'pointer',
-                      padding: '8px',
-                      margin: '4px',
-                      borderRadius: '4px',
-                      border: selectedRoute === route.route_id ? '2px solid #646cff' : '2px solid transparent'
-                    }}
+                    key={agency.agency_id}
+                    className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-100"
                   >
-                    <strong>{route.route_short_name || route.route_id}</strong>
-                    <div style={{ fontSize: '0.85em' }}>{route.route_long_name}</div>
-                  </div>
-                )
-              })}
-            </div>
-          </section>
-
-          {selectedRoute && (
-            <section className="section">
-              <h2>Trips for Route {routes.find(r => r.route_id === selectedRoute)?.route_short_name}</h2>
-              {Object.entries(groupTripsByDirection(trips)).map(([directionId, dirTrips]) => (
-                <div key={directionId}>
-                  <h3>Direction {directionId}</h3>
-                  <div className="trips-list">
-                    {(dirTrips as any[]).map((trip: any) => (
-                      <div
-                        key={trip.trip_id}
-                        className={`trip-item ${selectedTrip === trip.trip_id ? 'selected' : ''}`}
-                        onClick={() => setSelectedTrip(trip.trip_id)}
-                        style={{
-                          cursor: 'pointer',
-                          padding: '8px',
-                          margin: '4px',
-                          border: selectedTrip === trip.trip_id ? '2px solid #646cff' : '1px solid #444',
-                          borderRadius: '4px'
-                        }}
+                    <div className="font-semibold text-gray-900">{agency.agency_name}</div>
+                    {agency.agency_url && (
+                      <a
+                        href={agency.agency_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
                       >
-                        {trip.trip_short_name || trip.trip_id}
-                        {trip.trip_headsign && <span> - {trip.trip_headsign}</span>}
-                      </div>
-                    ))}
+                        Visit Website →
+                      </a>
+                    )}
                   </div>
-                </div>
-              ))}
-            </section>
-          )}
+                ))}
+              </div>
+            </div>
 
-          {selectedTrip && stopTimes.length > 0 && (
-            <section className="section">
-              <h2>Stop Times for Trip</h2>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Sequence</th>
-                    <th>Stop Name</th>
-                    <th>Arrival Time</th>
-                    <th>Departure Time</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {stopTimes.map((st: any) => {
-                    const stop = getStopById(st.stop_id)
-                    return (
-                      <tr key={`${st.trip_id}-${st.stop_sequence}`}>
-                        <td>{st.stop_sequence}</td>
-                        <td>{stop?.stop_name || st.stop_id}</td>
-                        <td>{st.arrival_time}</td>
-                        <td>{st.departure_time}</td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </section>
-          )}
+            {/* Routes */}
+            <div className="bg-white rounded-xl shadow-md p-6 mb-8">
+              <h2 className="text-xl font-semibold text-gray-800 mb-4">Routes</h2>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                {routes.map((route: any) => {
+                  const bgColor = route.route_color ? `#${route.route_color}` : '#3b82f6'
+                  const textColor = route.route_text_color
+                    ? `#${route.route_text_color}`
+                    : getContrastColor(bgColor)
+                  const isSelected = selectedRoute === route.route_id
 
-          <section className="section">
-            <h2>Active Alerts</h2>
-            {alerts.length === 0 ? (
-              <p>No active alerts</p>
-            ) : (
-              <table>
-                <thead>
-                  <tr>
-                    <th>Header</th>
-                    <th>Description</th>
-                    <th>Affected Routes</th>
-                    <th>Start</th>
-                    <th>End</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {alerts.map((alert: any, idx: number) => {
-                    const affectedRoutes = alert.informed_entity
-                      ?.map((entity: any) => entity.route_id)
-                      .filter(Boolean)
-                      .map((routeId: string) => getRouteById(routeId))
-                      .filter(Boolean) || []
+                  return (
+                    <button
+                      key={route.route_id}
+                      onClick={() => setSelectedRoute(route.route_id)}
+                      style={{ backgroundColor: bgColor, color: textColor }}
+                      className={`p-4 rounded-lg font-semibold transition-all hover:scale-105 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${
+                        isSelected ? 'ring-4 ring-blue-500 shadow-xl scale-105' : 'shadow-md'
+                      }`}
+                    >
+                      <div className="text-lg">{route.route_short_name || route.route_id}</div>
+                      <div className="text-xs mt-1 opacity-90 line-clamp-2">
+                        {route.route_long_name}
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
 
-                    const activePeriod = alert.active_period?.[0]
-
-                    return (
-                      <tr key={alert.id || idx}>
-                        <td>{alert.header_text?.translation?.[0]?.text || 'N/A'}</td>
-                        <td>{alert.description_text?.translation?.[0]?.text || 'N/A'}</td>
-                        <td>
-                          {affectedRoutes.map((route: any) => {
-                            const bgColor = route.route_color ? `#${route.route_color}` : '#333333'
-                            const textColor = route.route_text_color ? `#${route.route_text_color}` : getContrastColor(bgColor)
-                            return (
-                              <span
-                                key={route.route_id}
-                                className="route-badge"
-                                style={{
-                                  backgroundColor: bgColor,
-                                  color: textColor,
-                                  marginRight: '4px'
-                                }}
-                              >
-                                {route.route_short_name}
-                              </span>
-                            )
-                          })}
-                        </td>
-                        <td>{formatDate(activePeriod?.start)}</td>
-                        <td>{formatDate(activePeriod?.end)}</td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            )}
-          </section>
-
-          <section className="section">
-            <h2>Vehicles</h2>
-            {vehicles.length === 0 ? (
-              <p>No vehicle positions available</p>
-            ) : (
-              <table>
-                <thead>
-                  <tr>
-                    <th>Vehicle ID</th>
-                    <th>Route</th>
-                    <th>Trip</th>
-                    <th>Latitude</th>
-                    <th>Longitude</th>
-                    <th>Status</th>
-                    <th>Current Stop</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {vehicles.map((vehicle: any) => {
-                    const route = getRouteById(vehicle.trip?.route_id)
-                    const currentStop = vehicle.stop_id ? getStopById(vehicle.stop_id) : null
-
-                    return (
-                      <tr key={vehicle.vehicle?.id || vehicle.trip?.trip_id}>
-                        <td>{vehicle.vehicle?.id || 'N/A'}</td>
-                        <td>
-                          {route && (
-                            <span
-                              className="route-badge"
-                              style={{
-                                backgroundColor: route.route_color ? `#${route.route_color}` : '#333333',
-                                color: route.route_text_color ? `#${route.route_text_color}` : getContrastColor(route.route_color ? `#${route.route_color}` : '#333333')
-                              }}
-                            >
-                              {route.route_short_name}
-                            </span>
+            {/* Trips */}
+            {selectedRoute && trips.length > 0 && (
+              <div className="bg-white rounded-xl shadow-md p-6 mb-8">
+                <h2 className="text-xl font-semibold text-gray-800 mb-4">
+                  Trips for Route{' '}
+                  <span className="text-blue-600">
+                    {routes.find((r) => r.route_id === selectedRoute)?.route_short_name}
+                  </span>
+                </h2>
+                {Object.entries(groupTripsByDirection(trips)).map(([directionId, dirTrips]) => (
+                  <div key={directionId} className="mb-6 last:mb-0">
+                    <h3 className="text-lg font-medium text-gray-700 mb-3">
+                      Direction {directionId}
+                    </h3>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
+                      {(dirTrips as any[]).map((trip: any) => (
+                        <button
+                          key={trip.trip_id}
+                          onClick={() => setSelectedTrip(trip.trip_id)}
+                          className={`p-3 rounded-lg text-sm font-medium transition-all hover:shadow-md ${
+                            selectedTrip === trip.trip_id
+                              ? 'bg-blue-600 text-white shadow-lg'
+                              : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                          }`}
+                        >
+                          <div>{trip.trip_short_name || trip.trip_id}</div>
+                          {trip.trip_headsign && (
+                            <div className="text-xs mt-1 opacity-80 truncate">
+                              {trip.trip_headsign}
+                            </div>
                           )}
-                        </td>
-                        <td>{vehicle.trip?.trip_id || 'N/A'}</td>
-                        <td>{vehicle.position?.latitude?.toFixed(6) || 'N/A'}</td>
-                        <td>{vehicle.position?.longitude?.toFixed(6) || 'N/A'}</td>
-                        <td>{getVehicleStatus(vehicle.current_status)}</td>
-                        <td>{currentStop?.stop_name || vehicle.stop_id || 'N/A'}</td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
-          </section>
+
+            {/* Stop Times */}
+            {selectedTrip && stopTimes.length > 0 && (
+              <div className="bg-white rounded-xl shadow-md p-6 mb-8">
+                <h2 className="text-xl font-semibold text-gray-800 mb-4">Stop Times</h2>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b-2 border-gray-200">
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">
+                          Seq
+                        </th>
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">
+                          Stop Name
+                        </th>
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">
+                          Arrival
+                        </th>
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">
+                          Departure
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {stopTimes.map((st: any, idx: number) => {
+                        const stop = getStopById(st.stop_id)
+                        return (
+                          <tr
+                            key={`${st.trip_id}-${st.stop_sequence}`}
+                            className={`border-b border-gray-100 hover:bg-blue-50 transition-colors ${
+                              idx % 2 === 0 ? 'bg-gray-50' : 'bg-white'
+                            }`}
+                          >
+                            <td className="py-3 px-4 text-sm font-medium text-gray-600">
+                              {st.stop_sequence}
+                            </td>
+                            <td className="py-3 px-4 text-sm text-gray-900">
+                              {stop?.stop_name || st.stop_id}
+                            </td>
+                            <td className="py-3 px-4 text-sm text-gray-700 font-mono">
+                              {st.arrival_time}
+                            </td>
+                            <td className="py-3 px-4 text-sm text-gray-700 font-mono">
+                              {st.departure_time}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Active Alerts */}
+            <div className="bg-white rounded-xl shadow-md p-6 mb-8">
+              <h2 className="text-xl font-semibold text-gray-800 mb-4">Active Alerts</h2>
+              {alerts.length === 0 ? (
+                <p className="text-gray-500 text-center py-8">No active alerts</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b-2 border-gray-200">
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">
+                          Header
+                        </th>
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">
+                          Description
+                        </th>
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">
+                          Routes
+                        </th>
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">
+                          Period
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {alerts.map((alert: any, idx: number) => {
+                        const affectedRoutes = alert.informed_entity
+                          ?.map((entity: any) => entity.route_id)
+                          .filter(Boolean)
+                          .map((routeId: string) => getRouteById(routeId))
+                          .filter(Boolean) || []
+
+                        const activePeriod = alert.active_period?.[0]
+
+                        return (
+                          <tr
+                            key={alert.id || idx}
+                            className={`border-b border-gray-100 hover:bg-orange-50 transition-colors ${
+                              idx % 2 === 0 ? 'bg-gray-50' : 'bg-white'
+                            }`}
+                          >
+                            <td className="py-3 px-4 text-sm font-medium text-gray-900">
+                              {alert.header_text?.translation?.[0]?.text || 'N/A'}
+                            </td>
+                            <td className="py-3 px-4 text-sm text-gray-700">
+                              {alert.description_text?.translation?.[0]?.text || 'N/A'}
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="flex flex-wrap gap-1">
+                                {affectedRoutes.map((route: any) => {
+                                  const bgColor = route.route_color
+                                    ? `#${route.route_color}`
+                                    : '#3b82f6'
+                                  const textColor = route.route_text_color
+                                    ? `#${route.route_text_color}`
+                                    : getContrastColor(bgColor)
+                                  return (
+                                    <span
+                                      key={route.route_id}
+                                      style={{ backgroundColor: bgColor, color: textColor }}
+                                      className="px-2 py-1 rounded text-xs font-semibold"
+                                    >
+                                      {route.route_short_name}
+                                    </span>
+                                  )
+                                })}
+                              </div>
+                            </td>
+                            <td className="py-3 px-4 text-xs text-gray-600">
+                              <div>{formatDate(activePeriod?.start)}</div>
+                              <div className="text-gray-500">to</div>
+                              <div>{formatDate(activePeriod?.end)}</div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Vehicles */}
+            <div className="bg-white rounded-xl shadow-md p-6 mb-8">
+              <h2 className="text-xl font-semibold text-gray-800 mb-4">Vehicle Positions</h2>
+              {vehicles.length === 0 ? (
+                <p className="text-gray-500 text-center py-8">No vehicle positions available</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b-2 border-gray-200">
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">
+                          Vehicle
+                        </th>
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">
+                          Route
+                        </th>
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">
+                          Position
+                        </th>
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">
+                          Status
+                        </th>
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">
+                          Current Stop
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {vehicles.map((vehicle: any, idx: number) => {
+                        const route = getRouteById(vehicle.trip?.route_id)
+                        const currentStop = vehicle.stop_id ? getStopById(vehicle.stop_id) : null
+
+                        return (
+                          <tr
+                            key={vehicle.vehicle?.id || vehicle.trip?.trip_id || idx}
+                            className={`border-b border-gray-100 hover:bg-green-50 transition-colors ${
+                              idx % 2 === 0 ? 'bg-gray-50' : 'bg-white'
+                            }`}
+                          >
+                            <td className="py-3 px-4 text-sm font-medium text-gray-900">
+                              {vehicle.vehicle?.id || 'N/A'}
+                            </td>
+                            <td className="py-3 px-4">
+                              {route && (
+                                <span
+                                  style={{
+                                    backgroundColor: route.route_color
+                                      ? `#${route.route_color}`
+                                      : '#3b82f6',
+                                    color: route.route_text_color
+                                      ? `#${route.route_text_color}`
+                                      : getContrastColor(
+                                          route.route_color ? `#${route.route_color}` : '#3b82f6'
+                                        ),
+                                  }}
+                                  className="px-2 py-1 rounded text-sm font-semibold inline-block"
+                                >
+                                  {route.route_short_name}
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 text-xs font-mono text-gray-700">
+                              <div>
+                                Lat: {vehicle.position?.latitude?.toFixed(6) || 'N/A'}
+                              </div>
+                              <div>
+                                Lng: {vehicle.position?.longitude?.toFixed(6) || 'N/A'}
+                              </div>
+                            </td>
+                            <td className="py-3 px-4">
+                              <span
+                                className={`px-3 py-1 rounded-full text-xs font-medium ${getVehicleStatusColor(
+                                  vehicle.current_status
+                                )}`}
+                              >
+                                {getVehicleStatus(vehicle.current_status)}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-sm text-gray-700">
+                              {currentStop?.stop_name || vehicle.stop_id || 'N/A'}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </main>
+
+      {/* Footer */}
+      <footer className="bg-white border-t border-gray-200 mt-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <p className="text-center text-sm text-gray-600">
+            Powered by{' '}
+            <a
+              href="https://github.com/sysdevrun/gtfs-sqljs"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:text-blue-800 font-medium"
+            >
+              gtfs-sqljs
+            </a>
+          </p>
         </div>
-      )}
+      </footer>
     </div>
   )
 }

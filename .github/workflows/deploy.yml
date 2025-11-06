@@ -29,27 +29,33 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      - name: Build gtfs-sqljs separately
-        run: |
-          cd /tmp
-          git clone https://github.com/sysdevrun/gtfs-sqljs.git
-          cd gtfs-sqljs
-          npm install
-          npm run build
-
       - name: Install dependencies
         run: npm ci
 
-      - name: Copy gtfs-sqljs build and WASM file
+      - name: Verify gtfs-sqljs installation
         run: |
-          cp -r /tmp/gtfs-sqljs/dist node_modules/gtfs-sqljs/
+          echo "Checking gtfs-sqljs installation..."
+          ls -la node_modules/gtfs-sqljs/
+          if [ ! -d "node_modules/gtfs-sqljs/dist" ]; then
+            echo "dist folder not found, running prepare script..."
+            cd node_modules/gtfs-sqljs
+            npm install
+            npm run prepare || npm run build
+            cd ../..
+          fi
+          echo "gtfs-sqljs dist contents:"
+          ls -la node_modules/gtfs-sqljs/dist/ || echo "dist folder still missing"
+
+      - name: Copy SQL.js WASM file
+        run: |
           mkdir -p public
-          WASM_FILE=$(find /tmp/gtfs-sqljs/node_modules -name "sql-wasm.wasm" | head -1)
+          WASM_FILE=$(find node_modules -name "sql-wasm.wasm" | head -1)
           if [ -f "$WASM_FILE" ]; then
             cp "$WASM_FILE" public/
             echo "Copied WASM file from: $WASM_FILE"
           else
-            echo "Error: sql-wasm.wasm not found in /tmp/gtfs-sqljs"
+            echo "Error: sql-wasm.wasm not found"
+            find node_modules -name "*.wasm"
             exit 1
           fi
 
