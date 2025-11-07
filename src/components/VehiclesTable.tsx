@@ -1,12 +1,13 @@
-import { VehiclePosition, Route, GtfsSqlJs, StopTimeWithRealtime, Agency } from 'gtfs-sqljs'
+import { VehiclePosition, Route, StopTimeWithRealtime, Agency } from 'gtfs-sqljs'
 import { getVehicleStatus, getVehicleStatusColor, formatTimeAgo, formatDistance, computeDelayFromTimestamp, formatDelay } from './utils'
 import RouteLabel from './RouteLabel'
 import { getDistance } from 'geolib'
+import type { GtfsApi } from '../types/GtfsApi'
 
 interface VehiclesTableProps {
   vehicles: VehiclePosition[]
   getRouteById: (routeId: string) => Route | undefined
-  gtfs: GtfsSqlJs
+  gtfs: GtfsApi
   realtimeLastUpdated: number
   agencies: Agency[]
 }
