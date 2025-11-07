@@ -48,6 +48,7 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [autoRefresh, setAutoRefresh] = useState(true)
+  const [realtimeLastUpdated, setRealtimeLastUpdated] = useState<number>(0)
 
   // Data states
   const [agencies, setAgencies] = useState<Agency[]>([])
@@ -127,10 +128,19 @@ function App() {
       setAlerts(alertsData)
 
       const vehiclesData = instance.getVehiclePositions()
+      const tripUpdatesData = instance.getTripUpdates()
+
+      // Debug: Log realtime data counts
+      console.log(`Realtime data: ${vehiclesData.length} vehicles, ${tripUpdatesData.length} trip updates, ${alertsData.length} alerts`)
 
       // Debug: Log the first vehicle to see the structure
       if (vehiclesData.length > 0) {
         console.log('Sample vehicle data structure:', JSON.stringify(vehiclesData[0], null, 2))
+      }
+
+      // Debug: Log the first trip update to see the structure
+      if (tripUpdatesData.length > 0) {
+        console.log('Sample trip update:', JSON.stringify(tripUpdatesData[0], null, 2))
       }
 
       // Sort vehicles by route sort order
@@ -151,6 +161,9 @@ function App() {
         return aVehicleId.localeCompare(bVehicleId)
       })
       setVehicles(sortedVehicles)
+
+      // Update timestamp to trigger stop times refresh
+      setRealtimeLastUpdated(Date.now())
     } catch (err) {
       console.error('Error updating realtime data:', err)
     }
@@ -202,10 +215,19 @@ function App() {
     const stopTimesData = gtfs.getStopTimes({
       tripId: selectedTrip,
       includeRealtime: true
-    })
+    }) as StopTimeWithRealtime[]
+
+    // Debug: Check if realtime data is present
+    const withRealtime = stopTimesData.filter(st => st.realtime !== undefined)
+    if (withRealtime.length > 0) {
+      console.log(`Trip ${selectedTrip}: ${withRealtime.length}/${stopTimesData.length} stop times have realtime data`)
+      console.log('Sample stop time with realtime:', JSON.stringify(withRealtime[0], null, 2))
+    } else {
+      console.log(`Trip ${selectedTrip}: No realtime data in stop times`)
+    }
 
     setStopTimes(stopTimesData)
-  }, [gtfs, selectedTrip])
+  }, [gtfs, selectedTrip, realtimeLastUpdated])
 
   const getContrastColor = (hexColor: string) => {
     if (!hexColor) return '#000000'
