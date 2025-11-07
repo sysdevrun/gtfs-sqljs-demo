@@ -39,6 +39,8 @@ export default function ConfigurationTab({
       gtfsUrl: preset.gtfsUrl,
       gtfsRtUrls: preset.gtfsRtUrls
     })
+    // Trigger load immediately
+    setTimeout(() => loadGtfs(), 100)
   }
 
   const handleAddRtUrl = () => {

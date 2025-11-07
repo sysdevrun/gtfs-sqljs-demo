@@ -13,7 +13,10 @@ import {
   TableCell,
   TableContainer,
   TableHead,
-  TableRow
+  TableRow,
+  TextField,
+  Chip,
+  Stack
 } from '@mui/material'
 import { Stop, Route, Trip, StopTimeWithRealtime } from 'gtfs-sqljs'
 import type { Remote } from 'comlink'
@@ -33,6 +36,7 @@ interface StopGroup {
   name: string
   stops: Stop[]
   selected: boolean
+  routes: Route[]
 }
 
 interface Departure {
@@ -55,6 +59,41 @@ export default function DeparturesTab({
   const [stopGroups, setStopGroups] = useState<StopGroup[]>([])
   const [departures, setDepartures] = useState<Departure[]>([])
   const [loading, setLoading] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [stopRoutesMap, setStopRoutesMap] = useState<Map<string, Set<string>>>(new Map())
+
+  // Load routes going through each stop
+  useEffect(() => {
+    if (!workerApi) return
+
+    const loadStopRoutes = async () => {
+      const stopRoutes = new Map<string, Set<string>>()
+
+      const today = new Date().toISOString().split('T')[0].replace(/-/g, '')
+
+      for (const route of routes) {
+        try {
+          const trips = await workerApi.getTrips({ routeId: route.route_id, date: today })
+
+          for (const trip of trips) {
+            const stopTimes = await workerApi.getStopTimes(trip.trip_id)
+            stopTimes.forEach(st => {
+              if (!stopRoutes.has(st.stop_id)) {
+                stopRoutes.set(st.stop_id, new Set())
+              }
+              stopRoutes.get(st.stop_id)!.add(route.route_id)
+            })
+          }
+        } catch (err) {
+          console.error(`Error loading routes for stop:`, err)
+        }
+      }
+
+      setStopRoutesMap(stopRoutes)
+    }
+
+    loadStopRoutes()
+  }, [workerApi, routes])
 
   // Group stops by name
   useEffect(() => {
@@ -69,11 +108,24 @@ export default function DeparturesTab({
     })
 
     const groups: StopGroup[] = Array.from(groupsMap.entries())
-      .map(([name, stops]) => ({ name, stops, selected: false }))
+      .map(([name, stopList]) => {
+        // Get unique routes for all stops with this name
+        const routeIds = new Set<string>()
+        stopList.forEach(stop => {
+          const routesForStop = stopRoutesMap.get(stop.stop_id)
+          if (routesForStop) {
+            routesForStop.forEach(rid => routeIds.add(rid))
+          }
+        })
+
+        const groupRoutes = routes.filter(r => routeIds.has(r.route_id))
+
+        return { name, stops: stopList, selected: false, routes: groupRoutes }
+      })
       .sort((a, b) => a.name.localeCompare(b.name))
 
     setStopGroups(groups)
-  }, [stops])
+  }, [stops, stopRoutesMap, routes])
 
   // Toggle stop group selection
   const toggleStopGroup = (groupName: string) => {
@@ -100,13 +152,31 @@ export default function DeparturesTab({
       try {
         const now = new Date()
         const currentTimeSeconds = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()
+        const today = now.toISOString().split('T')[0].replace(/-/g, '')
 
         const allDepartures: Departure[] = []
+
+        // Get all trips running today
+        const tripsToday = new Map<string, { trip: Trip, route: Route | null }>()
+        for (const route of routes) {
+          try {
+            const trips = await workerApi.getTrips({ routeId: route.route_id, date: today })
+            trips.forEach(trip => {
+              tripsToday.set(trip.trip_id, { trip, route })
+            })
+          } catch (err) {
+            console.error('Error loading trips:', err)
+          }
+        }
 
         for (const stop of selectedStops) {
           const stopTimes = await workerApi.getStopTimes(stop.stop_id)
 
           for (const stopTime of stopTimes) {
+            // Only process if trip is running today
+            const tripInfo = tripsToday.get(stopTime.trip_id)
+            if (!tripInfo) continue
+
             // Parse departure time
             const [h, m, s] = stopTime.departure_time.split(':').map(Number)
             const departureTimeSeconds = h * 3600 + m * 60 + s
@@ -114,24 +184,16 @@ export default function DeparturesTab({
             // Get realtime departure if available
             let realtimeDepartureSeconds: number | null = null
             if (stopTime.realtime?.departure_time) {
-              const rtTime = new Date(stopTime.realtime.departure_time * 1000)
-              realtimeDepartureSeconds = rtTime.getHours() * 3600 + rtTime.getMinutes() * 60 + rtTime.getSeconds()
+              realtimeDepartureSeconds = stopTime.realtime.departure_time
             }
 
             const effectiveDepartureSeconds = realtimeDepartureSeconds ?? departureTimeSeconds
 
-            // Only include upcoming departures
-            if (effectiveDepartureSeconds >= currentTimeSeconds) {
-              // Fetch trip and route data
-              const tripData = await gtfsApi.fetchAndCacheTripData(stopTime.trip_id)
-              if (!tripData.trip) continue
-
-              const trip = tripData.trip
-              const route = trip.route_id ? routes.find(r => r.route_id === trip.route_id) || null : null
-
+            // Only include upcoming departures (with tolerance for times past midnight)
+            if (effectiveDepartureSeconds >= currentTimeSeconds || departureTimeSeconds >= 24 * 3600) {
               allDepartures.push({
-                trip,
-                route,
+                trip: tripInfo.trip,
+                route: tripInfo.route,
                 stopTime,
                 stop,
                 departureTimeSeconds,
@@ -186,32 +248,72 @@ export default function DeparturesTab({
 
   const selectedCount = stopGroups.filter(g => g.selected).length
 
+  const filteredStopGroups = stopGroups.filter(group =>
+    searchQuery === '' || group.name.toLowerCase().includes(searchQuery.toLowerCase())
+  )
+
   return (
     <Box sx={{ p: 3 }}>
       <Box sx={{ display: 'flex', gap: 3, flexDirection: { xs: 'column', md: 'row' } }}>
         <Box sx={{ flex: { xs: '1', md: '0 0 33%' } }}>
-          <Paper sx={{ p: 2, height: '600px', overflow: 'auto' }}>
+          <Paper sx={{ p: 2, height: '600px', display: 'flex', flexDirection: 'column' }}>
             <Typography variant="h6" gutterBottom>
               Select Stops ({selectedCount} selected)
             </Typography>
-            <List>
-              {stopGroups.map(group => (
-                <ListItem key={group.name} disablePadding>
-                  <ListItemButton onClick={() => toggleStopGroup(group.name)} dense>
-                    <Checkbox
-                      edge="start"
-                      checked={group.selected}
-                      tabIndex={-1}
-                      disableRipple
-                    />
-                    <ListItemText
-                      primary={group.name}
-                      secondary={`${group.stops.length} stop${group.stops.length > 1 ? 's' : ''}`}
-                    />
-                  </ListItemButton>
-                </ListItem>
-              ))}
-            </List>
+
+            <TextField
+              fullWidth
+              size="small"
+              placeholder="Search stops..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              sx={{ mb: 2 }}
+            />
+
+            <Box sx={{ flex: 1, overflow: 'auto' }}>
+              <List>
+                {filteredStopGroups.map(group => (
+                  <ListItem key={group.name} disablePadding sx={{ display: 'block' }}>
+                    <ListItemButton onClick={() => toggleStopGroup(group.name)} dense>
+                      <Checkbox
+                        edge="start"
+                        checked={group.selected}
+                        tabIndex={-1}
+                        disableRipple
+                      />
+                      <ListItemText
+                        primary={group.name}
+                        secondary={
+                          <Box>
+                            <Typography variant="caption" display="block">
+                              {group.stops.length} stop{group.stops.length > 1 ? 's' : ''}
+                            </Typography>
+                            {group.routes.length > 0 && (
+                              <Stack direction="row" spacing={0.5} flexWrap="wrap" gap={0.5} sx={{ mt: 0.5 }}>
+                                {group.routes.map(route => (
+                                  <Chip
+                                    key={route.route_id}
+                                    label={route.route_short_name || route.route_long_name}
+                                    size="small"
+                                    sx={{
+                                      backgroundColor: route.route_color ? `#${route.route_color}` : undefined,
+                                      color: route.route_text_color ? `#${route.route_text_color}` : undefined,
+                                      height: '20px',
+                                      fontSize: '0.7rem',
+                                      fontWeight: 'bold'
+                                    }}
+                                  />
+                                ))}
+                              </Stack>
+                            )}
+                          </Box>
+                        }
+                      />
+                    </ListItemButton>
+                  </ListItem>
+                ))}
+              </List>
+            </Box>
           </Paper>
         </Box>
 

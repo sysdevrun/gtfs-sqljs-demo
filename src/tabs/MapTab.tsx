@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Box, Paper, Typography, Dialog, DialogTitle, DialogContent } from '@mui/material'
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { VehiclePosition, Route, Trip } from 'gtfs-sqljs'
 import { GtfsApiAdapter } from '../utils/GtfsApiAdapter'
@@ -33,13 +33,15 @@ function createColoredIcon(textColor: string, bgColor: string, label: string): L
       <div style="
         background-color: ${bgColor};
         color: ${textColor};
-        padding: 4px 8px;
+        padding: 6px 12px;
         border-radius: 4px;
         font-weight: bold;
-        font-size: 12px;
+        font-size: 14px;
         white-space: nowrap;
         border: 2px solid white;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+        min-width: 40px;
+        text-align: center;
       ">
         ${label}
       </div>
@@ -144,17 +146,7 @@ export default function MapTab({ vehicles, routes, gtfsApi }: MapTabProps) {
                   eventHandlers={{
                     click: () => handleMarkerClick(vd)
                   }}
-                >
-                  <Popup>
-                    <strong>{label}</strong>
-                    {vd.route && (
-                      <div>Route: {vd.route.route_short_name || vd.route.route_long_name}</div>
-                    )}
-                    {vd.trip && (
-                      <div>Headsign: {vd.trip.trip_headsign}</div>
-                    )}
-                  </Popup>
-                </Marker>
+                />
               )
             })}
           </MapContainer>

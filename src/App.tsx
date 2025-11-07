@@ -389,12 +389,12 @@ function App() {
         <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
           <Container maxWidth="xl">
             <Tabs value={currentTab} onChange={handleTabChange} variant="scrollable" scrollButtons="auto">
-              <Tab icon={<SettingsIcon />} label="Configuration" />
               <Tab icon={<SearchIcon />} label="Browse Data" disabled={!gtfsLoaded} />
               <Tab icon={<ScheduleIcon />} label="Timetables" disabled={!gtfsLoaded} />
               <Tab icon={<MapIcon />} label="Map" disabled={!gtfsLoaded} />
               <Tab icon={<WarningIcon />} label="Alerts" disabled={!gtfsLoaded} />
               <Tab icon={<BusIcon />} label="Departures at Stop" disabled={!gtfsLoaded} />
+              <Tab icon={<SettingsIcon />} label="Configuration" />
             </Tabs>
           </Container>
         </Box>
@@ -402,20 +402,7 @@ function App() {
         {/* Tab Content */}
         <Box sx={{ flexGrow: 1, bgcolor: 'grey.100' }}>
           <Container maxWidth="xl" sx={{ py: 0 }}>
-            {currentTab === 0 && (
-              <ConfigurationTab
-                config={config}
-                setConfig={setConfig}
-                presets={PRESETS}
-                loading={loading}
-                error={error}
-                loadGtfs={loadGtfs}
-                downloadDatabase={downloadDatabase}
-                gtfsLoaded={gtfsLoaded}
-              />
-            )}
-
-            {currentTab === 1 && gtfsLoaded && (
+            {currentTab === 0 && gtfsLoaded && (
               <BrowseDataTab
                 agencies={agencies}
                 routes={routes}
@@ -430,7 +417,7 @@ function App() {
               />
             )}
 
-            {currentTab === 2 && gtfsLoaded && (
+            {currentTab === 1 && gtfsLoaded && (
               <TimetablesTab
                 routes={routes}
                 workerApi={workerRef.current}
@@ -438,7 +425,7 @@ function App() {
               />
             )}
 
-            {currentTab === 3 && gtfsLoaded && (
+            {currentTab === 2 && gtfsLoaded && (
               <MapTab
                 vehicles={vehicles}
                 routes={routes}
@@ -446,14 +433,14 @@ function App() {
               />
             )}
 
-            {currentTab === 4 && gtfsLoaded && (
+            {currentTab === 3 && gtfsLoaded && (
               <AlertsTab
                 alerts={alerts}
                 routes={routes}
               />
             )}
 
-            {currentTab === 5 && gtfsLoaded && (
+            {currentTab === 4 && gtfsLoaded && (
               <DeparturesTab
                 stops={stops}
                 routes={routes}
@@ -461,6 +448,19 @@ function App() {
                 gtfsApi={gtfsApiRef.current}
                 upcomingDeparturesCount={config.upcomingDeparturesCount}
                 updateInterval={config.updateInterval}
+              />
+            )}
+
+            {currentTab === 5 && (
+              <ConfigurationTab
+                config={config}
+                setConfig={setConfig}
+                presets={PRESETS}
+                loading={loading}
+                error={error}
+                loadGtfs={loadGtfs}
+                downloadDatabase={downloadDatabase}
+                gtfsLoaded={gtfsLoaded}
               />
             )}
           </Container>
