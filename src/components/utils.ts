@@ -26,6 +26,42 @@ export const secondsToTime = (totalSeconds: number): string => {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
 }
 
+export const unixTimestampToTime = (timestamp: number): string => {
+  const date = new Date(timestamp * 1000)
+  const hours = date.getHours()
+  const minutes = date.getMinutes()
+  const seconds = date.getSeconds()
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+}
+
+export const computeDelayFromTimestamp = (scheduledTime: string, realtimeTimestamp: number): number => {
+  // Get scheduled time in seconds since midnight
+  const scheduledSeconds = timeToSeconds(scheduledTime)
+
+  // Get realtime as seconds since midnight
+  const realtimeDate = new Date(realtimeTimestamp * 1000)
+  const realtimeSecondsOfDay = realtimeDate.getHours() * 3600 +
+                                 realtimeDate.getMinutes() * 60 +
+                                 realtimeDate.getSeconds()
+
+  // Handle day wrap-around for GTFS times >= 24:00:00
+  let delay = realtimeSecondsOfDay - scheduledSeconds
+
+  // If scheduled time is >= 24:00:00 (next day), adjust
+  if (scheduledSeconds >= 86400) {
+    // Scheduled time is for next day
+    delay = (realtimeSecondsOfDay + 86400) - scheduledSeconds
+  } else if (delay > 43200) {
+    // If delay seems too large (>12 hours), realtime might be next day
+    delay -= 86400
+  } else if (delay < -43200) {
+    // If delay seems too negative, scheduled might be next day
+    delay += 86400
+  }
+
+  return delay
+}
+
 export const computeDelay = (scheduledTime: string, realtimeTime: string): number => {
   return timeToSeconds(realtimeTime) - timeToSeconds(scheduledTime)
 }

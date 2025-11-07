@@ -1,5 +1,5 @@
 import { Route, Trip, VehiclePosition, GtfsSqlJs, StopTimeWithRealtime } from 'gtfs-sqljs'
-import { computeDelay, formatDelay } from './utils'
+import { computeDelayFromTimestamp, formatDelay } from './utils'
 import { ExtendedStopTimeRealtime } from '../types'
 
 interface TripsListProps {
@@ -50,17 +50,17 @@ export default function TripsList({
           if (st.realtime.arrival_delay !== undefined) {
             return st.realtime.arrival_delay
           }
-          // Otherwise compute from arrival time
-          if (realtimeExt.arrival_time) {
-            return computeDelay(st.arrival_time, realtimeExt.arrival_time)
+          // Otherwise compute from arrival timestamp
+          if (realtimeExt.arrival_time !== undefined) {
+            return computeDelayFromTimestamp(st.arrival_time, realtimeExt.arrival_time)
           }
           // Fallback to departure delay
           if (st.realtime.departure_delay !== undefined) {
             return st.realtime.departure_delay
           }
-          // Or compute from departure time
-          if (realtimeExt.departure_time) {
-            return computeDelay(st.departure_time, realtimeExt.departure_time)
+          // Or compute from departure timestamp
+          if (realtimeExt.departure_time !== undefined) {
+            return computeDelayFromTimestamp(st.departure_time, realtimeExt.departure_time)
           }
         }
       }

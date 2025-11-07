@@ -1,5 +1,5 @@
 import { StopTimeWithRealtime, GtfsSqlJs } from 'gtfs-sqljs'
-import { computeDelay, applyDelayToTime } from './utils'
+import { computeDelayFromTimestamp, applyDelayToTime, unixTimestampToTime } from './utils'
 import { ExtendedStopTimeRealtime } from '../types'
 
 interface StopTimesTableProps {
@@ -12,19 +12,21 @@ export default function StopTimesTable({ stopTimes, gtfs }: StopTimesTableProps)
     return gtfs.getStopById(stopId)
   }
 
-  const formatTimeWithRealtime = (scheduledTime: string, delay?: number, realtimeTime?: string) => {
-    // Determine the delay: use provided delay, or compute from realtime time
+  const formatTimeWithRealtime = (scheduledTime: string, delay?: number, realtimeTimestamp?: number) => {
+    // Determine the delay: use provided delay, or compute from realtime timestamp
     let effectiveDelay = delay
-    if (effectiveDelay === undefined && realtimeTime) {
-      effectiveDelay = computeDelay(scheduledTime, realtimeTime)
+    if (effectiveDelay === undefined && realtimeTimestamp !== undefined) {
+      effectiveDelay = computeDelayFromTimestamp(scheduledTime, realtimeTimestamp)
     }
 
     if (effectiveDelay === undefined) {
       return <span className="font-mono">{scheduledTime}</span>
     }
 
-    // Determine actual time: use realtime time if available, otherwise apply delay to scheduled time
-    const actualTime = realtimeTime || applyDelayToTime(scheduledTime, effectiveDelay)
+    // Determine actual time: convert realtime timestamp to HH:MM:SS if available, otherwise apply delay
+    const actualTime = realtimeTimestamp !== undefined
+      ? unixTimestampToTime(realtimeTimestamp)
+      : applyDelayToTime(scheduledTime, effectiveDelay)
     const delayMinutes = Math.floor(Math.abs(effectiveDelay) / 60)
     const delaySign = effectiveDelay > 0 ? '+' : '-'
 
