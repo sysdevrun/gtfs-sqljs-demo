@@ -359,18 +359,32 @@ export default function DeparturesTab({
   }, [stopGroups, workerApi, gtfsApi, routes, upcomingDeparturesCount, updateInterval])
 
   const formatTime = (seconds: number): string => {
-    const h = Math.floor(seconds / 3600)
+    const h = Math.floor(seconds / 3600) % 24  // Use modulo 24 for times >= 24h
     const m = Math.floor((seconds % 3600) / 60)
     return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
   }
 
   const formatDepartureTime = (departureSeconds: number, realtimeSeconds: number | null): string => {
+    // Get current time in agency timezone
+    const agencyTimezone = agencies.length > 0 && agencies[0].agency_timezone
+      ? agencies[0].agency_timezone
+      : Intl.DateTimeFormat().resolvedOptions().timeZone
+
     const now = new Date()
-    const currentTimeSeconds = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()
+    const agencyTimeString = now.toLocaleString('en-US', {
+      timeZone: agencyTimezone,
+      hour12: false,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    })
+    const [h, m, s] = agencyTimeString.split(':').map(Number)
+    const currentTimeSeconds = h * 3600 + m * 60 + s
+
     const effectiveSeconds = realtimeSeconds ?? departureSeconds
     const minutesUntil = Math.floor((effectiveSeconds - currentTimeSeconds) / 60)
 
-    if (minutesUntil < 60) {
+    if (minutesUntil >= 0 && minutesUntil < 60) {
       return `${minutesUntil} min.`
     }
 
