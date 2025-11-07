@@ -32,7 +32,7 @@ export class GtfsApiAdapter implements GtfsApi {
     return Array.from(this.stopsCache.values())
   }
 
-  async fetchAndCacheTripData(tripId: string): Promise<void> {
+  async fetchAndCacheTripData(tripId: string): Promise<{ trip: Trip | null; stopTimes: StopTimeWithRealtime[] }> {
     try {
       const [trips, stopTimes] = await Promise.all([
         this.worker.getTrips({ tripId }),
@@ -41,10 +41,14 @@ export class GtfsApiAdapter implements GtfsApi {
 
       if (trips.length > 0) {
         this.tripsCache.set(tripId, trips[0])
+        this.stopTimesCache.set(tripId, stopTimes)
+        return { trip: trips[0], stopTimes }
       }
       this.stopTimesCache.set(tripId, stopTimes)
+      return { trip: null, stopTimes }
     } catch (err) {
       console.error(`Error fetching trip data for ${tripId}:`, err)
+      return { trip: null, stopTimes: [] }
     }
   }
 
