@@ -57,9 +57,9 @@ class GtfsWorker implements GtfsWorkerAPI {
         skipFiles: ['shapes.txt'],
         locateFile: (filename: string) => {
           if (filename.endsWith('.wasm')) {
-            // In production build, WASM files are in the root
-            // In dev mode, they're served from public
-            return new URL(filename, self.location.href).href
+            // WASM files are at the base path, not relative to worker location
+            const base = import.meta.env.BASE_URL || '/'
+            return new URL(filename, new URL(base, self.location.origin)).href
           }
           return filename
         },
