@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { wrap, Remote, proxy } from 'comlink'
 import {
-  GtfsSqlJs,
   Agency,
   Route,
   Trip,
@@ -15,6 +15,8 @@ import TripsList from './components/TripsList'
 import StopTimesTable from './components/StopTimesTable'
 import AlertsTable from './components/AlertsTable'
 import VehiclesTable from './components/VehiclesTable'
+import LoadingProgress from './components/LoadingProgress'
+import type { GtfsWorkerAPI, ProgressInfo } from './gtfs.worker'
 
 const PROXY_BASE = 'https://gtfs-proxy.sys-dev-run.re/proxy/'
 
@@ -74,11 +76,15 @@ function App() {
   const [gtfsUrl, setGtfsUrl] = useState('https://pysae.com/api/v2/groups/car-jaune/gtfs/pub')
   const [gtfsRtUrls, setGtfsRtUrls] = useState<string[]>(['https://pysae.com/api/v2/groups/car-jaune/gtfs-rt'])
   const [newRtUrl, setNewRtUrl] = useState('')
-  const [gtfs, setGtfs] = useState<GtfsSqlJs | null>(null)
+  const [gtfsLoaded, setGtfsLoaded] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [loadingProgress, setLoadingProgress] = useState<ProgressInfo | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [realtimeLastUpdated, setRealtimeLastUpdated] = useState<number>(0)
+
+  // Web Worker reference
+  const workerRef = useRef<Remote<GtfsWorkerAPI> | null>(null)
 
   // Data states
   const [agencies, setAgencies] = useState<Agency[]>([])
@@ -89,6 +95,18 @@ function App() {
   const [stopTimes, setStopTimes] = useState<StopTimeWithRealtime[]>([])
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [vehicles, setVehicles] = useState<VehiclePosition[]>([])
+
+  // Initialize worker
+  useEffect(() => {
+    const worker = new Worker(new URL('./gtfs.worker.ts', import.meta.url), {
+      type: 'module'
+    })
+    workerRef.current = wrap<GtfsWorkerAPI>(worker)
+
+    return () => {
+      worker.terminate()
+    }
+  }, [])
 
   // Load preset configuration
   const loadPreset = (preset: PresetConfig) => {
@@ -111,30 +129,41 @@ function App() {
 
   // Load GTFS data
   const loadGtfs = useCallback(async () => {
+    if (!workerRef.current) return
+
     setLoading(true)
+    setLoadingProgress(null)
     setError(null)
+    setGtfsLoaded(false)
+
+    // Clear existing data
+    setAgencies([])
+    setRoutes([])
+    setTrips([])
+    setStopTimes([])
+    setAlerts([])
+    setVehicles([])
+    setSelectedRoute(null)
+    setSelectedTrip(null)
+
     try {
       const proxiedGtfsUrl = proxyUrl(gtfsUrl)
       const proxiedRtUrls = gtfsRtUrls.map(url => proxyUrl(url))
 
-      const instance = await GtfsSqlJs.fromZip(proxiedGtfsUrl, {
-        realtimeFeedUrls: proxiedRtUrls,
-        stalenessThreshold: 120,
-        skipFiles: ['shapes.txt'],
-        locateFile: (filename: string) => {
-          if (filename.endsWith('.wasm')) {
-            return import.meta.env.BASE_URL + filename
-          }
-          return filename
-        }
-      })
+      // Load GTFS with progress callback
+      await workerRef.current.loadGtfs(
+        proxiedGtfsUrl,
+        proxiedRtUrls,
+        proxy((progress: ProgressInfo) => {
+          setLoadingProgress(progress)
+        })
+      )
 
-      setGtfs(instance)
-
-      const agenciesData = instance.getAgencies()
+      // Fetch data from worker
+      const agenciesData = await workerRef.current.getAgencies()
       setAgencies(agenciesData)
 
-      const routesData = instance.getRoutes()
+      const routesData = await workerRef.current.getRoutes()
       const sortedRoutes = routesData.sort((a: Route, b: Route) => {
         const aSort = a.route_sort_order ?? 9999
         const bSort = b.route_sort_order ?? 9999
@@ -142,36 +171,32 @@ function App() {
       })
       setRoutes(sortedRoutes)
 
-      await instance.fetchRealtimeData()
-      updateRealtimeData(instance)
+      // Update realtime data
+      await updateRealtimeData()
 
+      setGtfsLoaded(true)
       setLoading(false)
+      setLoadingProgress(null)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load GTFS data')
       setLoading(false)
+      setLoadingProgress(null)
+      setGtfsLoaded(false)
     }
   }, [gtfsUrl, gtfsRtUrls])
 
-  const updateRealtimeData = useCallback((instance: GtfsSqlJs) => {
+  const updateRealtimeData = useCallback(async () => {
+    if (!workerRef.current || !gtfsLoaded) return
+
     try {
-      const alertsData = instance.getAlerts({ activeOnly: true })
+      const alertsData = await workerRef.current.getAlerts()
       setAlerts(alertsData)
 
-      const vehiclesData = instance.getVehiclePositions()
-      const tripUpdatesData = instance.getTripUpdates()
+      const vehiclesData = await workerRef.current.getVehiclePositions()
+      const tripUpdatesData = await workerRef.current.getTripUpdates()
 
       // Debug: Log realtime data counts
       console.log(`Realtime data: ${vehiclesData.length} vehicles, ${tripUpdatesData.length} trip updates, ${alertsData.length} alerts`)
-
-      // Debug: Log the first vehicle to see the structure
-      if (vehiclesData.length > 0) {
-        console.log('Sample vehicle data structure:', JSON.stringify(vehiclesData[0], null, 2))
-      }
-
-      // Debug: Log the first trip update to see the structure
-      if (tripUpdatesData.length > 0) {
-        console.log('Sample trip update:', JSON.stringify(tripUpdatesData[0], null, 2))
-      }
 
       // Sort vehicles by route sort order
       const sortedVehicles = vehiclesData.sort((a: VehiclePosition, b: VehiclePosition) => {
@@ -197,78 +222,80 @@ function App() {
     } catch (err) {
       console.error('Error updating realtime data:', err)
     }
-  }, [routes])
+  }, [routes, gtfsLoaded])
 
   useEffect(() => {
     loadGtfs()
   }, [])
 
   useEffect(() => {
-    if (!gtfs || !autoRefresh) return
+    if (!workerRef.current || !gtfsLoaded || !autoRefresh) return
 
     const interval = setInterval(async () => {
       try {
-        await gtfs.fetchRealtimeData()
-        updateRealtimeData(gtfs)
+        await workerRef.current!.fetchRealtimeData()
+        await updateRealtimeData()
       } catch (err) {
         console.error('Error fetching realtime data:', err)
       }
     }, 10000)
 
     return () => clearInterval(interval)
-  }, [gtfs, autoRefresh, updateRealtimeData])
+  }, [gtfsLoaded, autoRefresh, updateRealtimeData])
 
   useEffect(() => {
-    if (!gtfs || !selectedRoute) return
+    if (!workerRef.current || !gtfsLoaded || !selectedRoute) return
 
     const today = new Date().toISOString().slice(0, 10).replace(/-/g, '')
-    const tripsData = gtfs.getTrips({
-      routeId: selectedRoute,
-      date: today,
-      includeRealtime: true
-    })
 
-    const sortedTrips = tripsData.sort((a: Trip, b: Trip) => {
-      const aName = a.trip_short_name || a.trip_id
-      const bName = b.trip_short_name || b.trip_id
-      return aName.localeCompare(bName)
-    })
+    workerRef.current.getTrips(selectedRoute, today).then(tripsData => {
+      const sortedTrips = tripsData.sort((a: Trip, b: Trip) => {
+        const aName = a.trip_short_name || a.trip_id
+        const bName = b.trip_short_name || b.trip_id
+        return aName.localeCompare(bName)
+      })
 
-    setTrips(sortedTrips)
-    setSelectedTrip(null)
-    setStopTimes([])
-  }, [gtfs, selectedRoute])
+      setTrips(sortedTrips)
+      setSelectedTrip(null)
+      setStopTimes([])
+    })
+  }, [gtfsLoaded, selectedRoute])
 
   useEffect(() => {
-    if (!gtfs || !selectedTrip) return
+    if (!workerRef.current || !gtfsLoaded || !selectedTrip) return
 
-    const stopTimesData = gtfs.getStopTimes({
-      tripId: selectedTrip,
-      includeRealtime: true
-    }) as StopTimeWithRealtime[]
+    workerRef.current.getStopTimes(selectedTrip).then(stopTimesData => {
+      // Debug: Check if realtime data is present
+      const withRealtime = stopTimesData.filter(st => st.realtime !== undefined)
+      if (withRealtime.length > 0) {
+        console.log(`Trip ${selectedTrip}: ${withRealtime.length}/${stopTimesData.length} stop times have realtime data`)
+      } else {
+        console.log(`Trip ${selectedTrip}: No realtime data in stop times`)
+      }
 
-    // Debug: Check if realtime data is present
-    const withRealtime = stopTimesData.filter(st => st.realtime !== undefined)
-    if (withRealtime.length > 0) {
-      console.log(`Trip ${selectedTrip}: ${withRealtime.length}/${stopTimesData.length} stop times have realtime data`)
-      console.log('Sample stop time with realtime:', JSON.stringify(withRealtime[0], null, 2))
-    } else {
-      console.log(`Trip ${selectedTrip}: No realtime data in stop times`)
-    }
-
-    setStopTimes(stopTimesData)
-  }, [gtfs, selectedTrip, realtimeLastUpdated])
+      setStopTimes(stopTimesData)
+    })
+  }, [gtfsLoaded, selectedTrip, realtimeLastUpdated])
 
   const getRouteById = (routeId: string): Route | undefined => {
     return routes.find((r: Route) => r.route_id === routeId)
   }
 
   const downloadDatabase = async () => {
-    if (!gtfs) return
+    if (!workerRef.current || !gtfsLoaded) return
     try {
-      const db = gtfs.getDatabase()
-      const dbBuffer = db.export()
-      const blob = new Blob([dbBuffer], { type: 'application/x-sqlite3' })
+      const dbBuffer = await workerRef.current.getDatabase()
+      if (!dbBuffer) {
+        alert('No database available')
+        return
+      }
+
+      // Create a new ArrayBuffer copy to avoid SharedArrayBuffer issues
+      const arrayBuffer = new ArrayBuffer(dbBuffer.byteLength)
+      const uint8View = new Uint8Array(arrayBuffer)
+      uint8View.set(new Uint8Array(dbBuffer.buffer, dbBuffer.byteOffset, dbBuffer.byteLength))
+
+      const blob = new Blob([arrayBuffer], { type: 'application/x-sqlite3' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -285,11 +312,14 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+      {/* Loading Progress Overlay */}
+      {loading && <LoadingProgress progress={loadingProgress} />}
+
       {/* Header */}
       <header className="bg-gradient-to-r from-blue-600 to-blue-700 shadow-lg">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <h1 className="text-3xl font-bold text-white">GTFS Real-Time Explorer</h1>
-          <p className="mt-2 text-blue-100">Explore transit data with gtfs-sqljs</p>
+          <p className="mt-2 text-blue-100">Explore transit data with gtfs-sqljs (Web Worker)</p>
         </div>
       </header>
 
@@ -307,7 +337,7 @@ function App() {
           error={error}
           autoRefresh={autoRefresh}
           setAutoRefresh={setAutoRefresh}
-          gtfs={gtfs}
+          gtfs={gtfsLoaded ? {} as any : null}
           loadGtfs={loadGtfs}
           loadPreset={loadPreset}
           addRtUrl={addRtUrl}
@@ -315,7 +345,7 @@ function App() {
           downloadDatabase={downloadDatabase}
         />
 
-        {gtfs && (
+        {gtfsLoaded && (
           <>
             {/* Agencies */}
             <AgenciesList agencies={agencies} />
@@ -336,21 +366,21 @@ function App() {
                 routes={routes}
                 selectedRoute={selectedRoute}
                 vehicles={vehicles}
-                gtfs={gtfs}
+                gtfs={{} as any}
                 agencies={agencies}
               />
             )}
 
             {/* Stop Times */}
             {selectedTrip && stopTimes.length > 0 && (
-              <StopTimesTable stopTimes={stopTimes} gtfs={gtfs} selectedTrip={selectedTrip} vehicles={vehicles} agencies={agencies} />
+              <StopTimesTable stopTimes={stopTimes} gtfs={{} as any} selectedTrip={selectedTrip} vehicles={vehicles} agencies={agencies} />
             )}
 
             {/* Active Alerts */}
             <AlertsTable alerts={alerts} getRouteById={getRouteById} />
 
             {/* Vehicles */}
-            <VehiclesTable vehicles={vehicles} getRouteById={getRouteById} gtfs={gtfs} realtimeLastUpdated={realtimeLastUpdated} agencies={agencies} />
+            <VehiclesTable vehicles={vehicles} getRouteById={getRouteById} gtfs={{} as any} realtimeLastUpdated={realtimeLastUpdated} agencies={agencies} />
           </>
         )}
       </main>
@@ -368,6 +398,7 @@ function App() {
             >
               gtfs-sqljs
             </a>
+            {' '}with Web Workers
           </p>
         </div>
       </footer>

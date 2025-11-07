@@ -10,8 +10,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "comlink": "^4.4.2",
     "geolib": "^3.3.4",
-    "gtfs-sqljs": "github:sysdevrun/gtfs-sqljs#6a8d2e148a7cea95d7efc086864d7794d9acaa8d",
+    "gtfs-sqljs": "github:sysdevrun/gtfs-sqljs#5b5b553b38d9ad76b56936040fc880e073e3bb2f",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
