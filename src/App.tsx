@@ -313,19 +313,20 @@ function App() {
                 selectedRoute={selectedRoute}
                 vehicles={vehicles}
                 gtfs={gtfs}
+                agencies={agencies}
               />
             )}
 
             {/* Stop Times */}
             {selectedTrip && stopTimes.length > 0 && (
-              <StopTimesTable stopTimes={stopTimes} gtfs={gtfs} selectedTrip={selectedTrip} vehicles={vehicles} />
+              <StopTimesTable stopTimes={stopTimes} gtfs={gtfs} selectedTrip={selectedTrip} vehicles={vehicles} agencies={agencies} />
             )}
 
             {/* Active Alerts */}
             <AlertsTable alerts={alerts} getRouteById={getRouteById} />
 
             {/* Vehicles */}
-            <VehiclesTable vehicles={vehicles} getRouteById={getRouteById} gtfs={gtfs} realtimeLastUpdated={realtimeLastUpdated} />
+            <VehiclesTable vehicles={vehicles} getRouteById={getRouteById} gtfs={gtfs} realtimeLastUpdated={realtimeLastUpdated} agencies={agencies} />
           </>
         )}
       </main>
