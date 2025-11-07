@@ -7,7 +7,8 @@ import {
   StopTimeWithRealtime,
   Alert,
   VehiclePosition,
-  TripUpdate
+  TripUpdate,
+  Stop
 } from 'gtfs-sqljs'
 
 export interface ProgressInfo {
@@ -26,8 +27,9 @@ export interface GtfsWorkerAPI {
   clearData: () => Promise<void>
   getAgencies: () => Agency[]
   getRoutes: () => Route[]
-  getTrips: (routeId: string, date: string) => Trip[]
+  getTrips: (options?: { routeId?: string; tripId?: string; date?: string }) => Trip[]
   getStopTimes: (tripId: string) => StopTimeWithRealtime[]
+  getStops: (options?: { stopId?: string }) => Stop[]
   getAlerts: () => Alert[]
   getVehiclePositions: () => VehiclePosition[]
   getTripUpdates: () => TripUpdate[]
@@ -101,13 +103,19 @@ class GtfsWorker implements GtfsWorkerAPI {
     return this.gtfs.getRoutes()
   }
 
-  getTrips(routeId: string, date: string): Trip[] {
+  getTrips(options?: { routeId?: string; tripId?: string; date?: string }): Trip[] {
     if (!this.gtfs) {
       throw new Error('GTFS not loaded')
     }
+
+    if (!options) {
+      return this.gtfs.getTrips()
+    }
+
     return this.gtfs.getTrips({
-      routeId,
-      date,
+      routeId: options.routeId,
+      tripId: options.tripId,
+      date: options.date,
       includeRealtime: true
     })
   }
@@ -120,6 +128,18 @@ class GtfsWorker implements GtfsWorkerAPI {
       tripId,
       includeRealtime: true
     }) as StopTimeWithRealtime[]
+  }
+
+  getStops(options?: { stopId?: string }): Stop[] {
+    if (!this.gtfs) {
+      throw new Error('GTFS not loaded')
+    }
+
+    if (!options || !options.stopId) {
+      return this.gtfs.getStops()
+    }
+
+    return this.gtfs.getStops({ stopId: options.stopId })
   }
 
   getAlerts(): Alert[] {

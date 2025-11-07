@@ -17,6 +17,7 @@ import AlertsTable from './components/AlertsTable'
 import VehiclesTable from './components/VehiclesTable'
 import LoadingProgress from './components/LoadingProgress'
 import type { GtfsWorkerAPI, ProgressInfo } from './gtfs.worker'
+import { GtfsApiAdapter } from './utils/GtfsApiAdapter'
 
 const PROXY_BASE = 'https://gtfs-proxy.sys-dev-run.re/proxy/'
 
@@ -85,6 +86,7 @@ function App() {
 
   // Web Worker reference
   const workerRef = useRef<Remote<GtfsWorkerAPI> | null>(null)
+  const gtfsApiRef = useRef<GtfsApiAdapter | null>(null)
 
   // Data states
   const [agencies, setAgencies] = useState<Agency[]>([])
@@ -101,7 +103,9 @@ function App() {
     const worker = new Worker(new URL('./gtfs.worker.ts', import.meta.url), {
       type: 'module'
     })
-    workerRef.current = wrap<GtfsWorkerAPI>(worker)
+    const workerApi = wrap<GtfsWorkerAPI>(worker)
+    workerRef.current = workerApi
+    gtfsApiRef.current = new GtfsApiAdapter(workerApi)
 
     return () => {
       worker.terminate()
@@ -146,6 +150,11 @@ function App() {
     setSelectedRoute(null)
     setSelectedTrip(null)
 
+    // Clear API adapter cache
+    if (gtfsApiRef.current) {
+      gtfsApiRef.current.clearCache()
+    }
+
     try {
       const proxiedGtfsUrl = proxyUrl(gtfsUrl)
       const proxiedRtUrls = gtfsRtUrls.map(url => proxyUrl(url))
@@ -171,6 +180,12 @@ function App() {
       })
       setRoutes(sortedRoutes)
 
+      // Fetch stops and update API adapter cache
+      const stopsData = await workerRef.current.getStops()
+      if (gtfsApiRef.current) {
+        gtfsApiRef.current.setStops(stopsData)
+      }
+
       // Update realtime data
       await updateRealtimeData()
 
@@ -186,7 +201,7 @@ function App() {
   }, [gtfsUrl, gtfsRtUrls])
 
   const updateRealtimeData = useCallback(async () => {
-    if (!workerRef.current || !gtfsLoaded) return
+    if (!workerRef.current || !gtfsLoaded || !gtfsApiRef.current) return
 
     try {
       const alertsData = await workerRef.current.getAlerts()
@@ -197,6 +212,16 @@ function App() {
 
       // Debug: Log realtime data counts
       console.log(`Realtime data: ${vehiclesData.length} vehicles, ${tripUpdatesData.length} trip updates, ${alertsData.length} alerts`)
+
+      // Pre-fetch trip data for all vehicles to populate cache
+      const tripIds = new Set<string>()
+      vehiclesData.forEach(v => {
+        if (v.trip_id) tripIds.add(v.trip_id)
+      })
+
+      await Promise.all(
+        Array.from(tripIds).map(tripId => gtfsApiRef.current!.fetchAndCacheTripData(tripId))
+      )
 
       // Sort vehicles by route sort order
       const sortedVehicles = vehiclesData.sort((a: VehiclePosition, b: VehiclePosition) => {
@@ -244,16 +269,23 @@ function App() {
   }, [gtfsLoaded, autoRefresh, updateRealtimeData])
 
   useEffect(() => {
-    if (!workerRef.current || !gtfsLoaded || !selectedRoute) return
+    if (!workerRef.current || !gtfsLoaded || !selectedRoute || !gtfsApiRef.current) return
 
     const today = new Date().toISOString().slice(0, 10).replace(/-/g, '')
 
-    workerRef.current.getTrips(selectedRoute, today).then(tripsData => {
+    workerRef.current.getTrips({ routeId: selectedRoute, date: today }).then(async tripsData => {
       const sortedTrips = tripsData.sort((a: Trip, b: Trip) => {
         const aName = a.trip_short_name || a.trip_id
         const bName = b.trip_short_name || b.trip_id
         return aName.localeCompare(bName)
       })
+
+      // Pre-fetch trip data for all trips in this route
+      if (gtfsApiRef.current) {
+        await Promise.all(
+          sortedTrips.map(trip => gtfsApiRef.current!.fetchAndCacheTripData(trip.trip_id))
+        )
+      }
 
       setTrips(sortedTrips)
       setSelectedTrip(null)
@@ -358,7 +390,7 @@ function App() {
             />
 
             {/* Trips */}
-            {selectedRoute && trips.length > 0 && (
+            {selectedRoute && trips.length > 0 && gtfsApiRef.current && (
               <TripsList
                 trips={trips}
                 selectedTrip={selectedTrip}
@@ -366,21 +398,23 @@ function App() {
                 routes={routes}
                 selectedRoute={selectedRoute}
                 vehicles={vehicles}
-                gtfs={{} as any}
+                gtfs={gtfsApiRef.current as any}
                 agencies={agencies}
               />
             )}
 
             {/* Stop Times */}
-            {selectedTrip && stopTimes.length > 0 && (
-              <StopTimesTable stopTimes={stopTimes} gtfs={{} as any} selectedTrip={selectedTrip} vehicles={vehicles} agencies={agencies} />
+            {selectedTrip && stopTimes.length > 0 && gtfsApiRef.current && (
+              <StopTimesTable stopTimes={stopTimes} gtfs={gtfsApiRef.current as any} selectedTrip={selectedTrip} vehicles={vehicles} agencies={agencies} />
             )}
 
             {/* Active Alerts */}
             <AlertsTable alerts={alerts} getRouteById={getRouteById} />
 
             {/* Vehicles */}
-            <VehiclesTable vehicles={vehicles} getRouteById={getRouteById} gtfs={{} as any} realtimeLastUpdated={realtimeLastUpdated} agencies={agencies} />
+            {gtfsApiRef.current && (
+              <VehiclesTable vehicles={vehicles} getRouteById={getRouteById} gtfs={gtfsApiRef.current as any} realtimeLastUpdated={realtimeLastUpdated} agencies={agencies} />
+            )}
           </>
         )}
       </main>
