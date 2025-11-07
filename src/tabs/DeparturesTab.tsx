@@ -192,65 +192,76 @@ export default function DeparturesTab({
         let totalStopTimesChecked = 0
         let filteredByNotToday = 0
         let filteredByTime = 0
+        let tripsProcessed = 0
 
-        for (const stop of selectedStops) {
-          const stopTimes = await workerApi.getStopTimes(stop.stop_id)
-          debugLines.push(`Stop "${stop.stop_name}" (${stop.stop_id}): ${stopTimes.length} stop times`)
+        // Create a set of selected stop IDs for quick lookup
+        const selectedStopIds = new Set(selectedStops.map(s => s.stop_id))
 
-          for (const stopTime of stopTimes) {
-            totalStopTimesChecked++
+        // Iterate through all trips running today
+        for (const [tripId, tripInfo] of tripsToday) {
+          try {
+            // Get stop times for this trip (CORRECT - using trip_id)
+            const stopTimes = await workerApi.getStopTimes(tripId)
+            tripsProcessed++
 
-            // Only process if trip is running today
-            const tripInfo = tripsToday.get(stopTime.trip_id)
-            if (!tripInfo) {
-              filteredByNotToday++
-              allStopTimesChecked.push({
-                stopTime,
-                tripInfo: null,
-                passed: false,
-                reason: 'Trip not running today'
-              })
-              continue
+            // Filter stop times to only those at selected stops
+            const relevantStopTimes = stopTimes.filter(st => selectedStopIds.has(st.stop_id))
+
+            if (relevantStopTimes.length > 0) {
+              debugLines.push(`Trip ${tripId}: ${relevantStopTimes.length} stop times at selected stops`)
             }
 
-            // Parse departure time
-            const [h, m, s] = stopTime.departure_time.split(':').map(Number)
-            const departureTimeSeconds = h * 3600 + m * 60 + s
+            for (const stopTime of relevantStopTimes) {
+              totalStopTimesChecked++
 
-            // Get realtime departure if available
-            let realtimeDepartureSeconds: number | null = null
-            if (stopTime.realtime?.departure_time) {
-              realtimeDepartureSeconds = stopTime.realtime.departure_time
+              // Find the corresponding stop object
+              const stop = selectedStops.find(s => s.stop_id === stopTime.stop_id)
+              if (!stop) continue
+
+              // Parse departure time
+              const [h, m, s] = stopTime.departure_time.split(':').map(Number)
+              const departureTimeSeconds = h * 3600 + m * 60 + s
+
+              // Get realtime departure if available
+              let realtimeDepartureSeconds: number | null = null
+              if (stopTime.realtime?.departure_time) {
+                realtimeDepartureSeconds = stopTime.realtime.departure_time
+              }
+
+              const effectiveDepartureSeconds = realtimeDepartureSeconds ?? departureTimeSeconds
+
+              // Only include upcoming departures (with tolerance for times past midnight)
+              if (effectiveDepartureSeconds >= currentTimeSeconds || departureTimeSeconds >= 24 * 3600) {
+                allDepartures.push({
+                  trip: tripInfo.trip,
+                  route: tripInfo.route,
+                  stopTime,
+                  stop,
+                  departureTimeSeconds,
+                  realtimeDepartureSeconds
+                })
+                allStopTimesChecked.push({
+                  stopTime,
+                  tripInfo,
+                  passed: true
+                })
+              } else {
+                filteredByTime++
+                allStopTimesChecked.push({
+                  stopTime,
+                  tripInfo,
+                  passed: false,
+                  reason: `Time ${formatTime(effectiveDepartureSeconds)} < current ${formatTime(currentTimeSeconds)}`
+                })
+              }
             }
-
-            const effectiveDepartureSeconds = realtimeDepartureSeconds ?? departureTimeSeconds
-
-            // Only include upcoming departures (with tolerance for times past midnight)
-            if (effectiveDepartureSeconds >= currentTimeSeconds || departureTimeSeconds >= 24 * 3600) {
-              allDepartures.push({
-                trip: tripInfo.trip,
-                route: tripInfo.route,
-                stopTime,
-                stop,
-                departureTimeSeconds,
-                realtimeDepartureSeconds
-              })
-              allStopTimesChecked.push({
-                stopTime,
-                tripInfo,
-                passed: true
-              })
-            } else {
-              filteredByTime++
-              allStopTimesChecked.push({
-                stopTime,
-                tripInfo,
-                passed: false,
-                reason: `Time ${formatTime(effectiveDepartureSeconds)} < current ${formatTime(currentTimeSeconds)}`
-              })
-            }
+          } catch (err) {
+            console.error(`Error processing trip ${tripId}:`, err)
           }
         }
+
+        debugLines.push(``)
+        debugLines.push(`Trips processed: ${tripsProcessed}`)
 
         debugLines.push(``)
         debugLines.push(`Total stop times checked: ${totalStopTimesChecked}`)
