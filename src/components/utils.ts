@@ -26,53 +26,35 @@ export const secondsToTime = (totalSeconds: number): string => {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
 }
 
-export const unixTimestampToTime = (timestamp: number, timezone?: string): string => {
+export const unixTimestampToTime = (timestamp: number, timezone: string): string => {
   const date = new Date(timestamp * 1000)
 
-  if (timezone) {
-    // Use the agency's timezone
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false
-    })
-    return formatter.format(date)
-  }
-
-  // Fallback to UTC if no timezone provided
-  const hours = date.getUTCHours()
-  const minutes = date.getUTCMinutes()
-  const seconds = date.getUTCSeconds()
-  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+  // Use the agency's timezone
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  })
+  return formatter.format(date)
 }
 
-export const computeDelayFromTimestamp = (scheduledTime: string, realtimeTimestamp: number, timezone?: string): number => {
+export const computeDelayFromTimestamp = (scheduledTime: string, realtimeTimestamp: number, timezone: string): number => {
   // Get scheduled time in seconds since midnight
   const scheduledSeconds = timeToSeconds(scheduledTime)
 
   // Get realtime as seconds since midnight in the agency's timezone
-  let realtimeSecondsOfDay: number
-
-  if (timezone) {
-    const date = new Date(realtimeTimestamp * 1000)
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false
-    })
-    const timeStr = formatter.format(date)
-    realtimeSecondsOfDay = timeToSeconds(timeStr)
-  } else {
-    // Fallback to UTC
-    const date = new Date(realtimeTimestamp * 1000)
-    realtimeSecondsOfDay = date.getUTCHours() * 3600 +
-                           date.getUTCMinutes() * 60 +
-                           date.getUTCSeconds()
-  }
+  const date = new Date(realtimeTimestamp * 1000)
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  })
+  const timeStr = formatter.format(date)
+  const realtimeSecondsOfDay = timeToSeconds(timeStr)
 
   // Handle day wrap-around for GTFS times >= 24:00:00
   let delay = realtimeSecondsOfDay - scheduledSeconds

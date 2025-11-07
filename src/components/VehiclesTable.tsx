@@ -22,7 +22,10 @@ interface GroupedVehicles {
 
 export default function VehiclesTable({ vehicles, getRouteById, gtfs, realtimeLastUpdated, agencies }: VehiclesTableProps) {
   // Get agency timezone (use first agency's timezone)
-  const agencyTimezone = agencies.length > 0 ? agencies[0].agency_timezone : undefined
+  if (agencies.length === 0 || !agencies[0].agency_timezone) {
+    throw new Error('Agency timezone is required but not available')
+  }
+  const agencyTimezone = agencies[0].agency_timezone
 
   const getStopById = (stopId: string) => {
     const stops = gtfs.getStops({ stopId })

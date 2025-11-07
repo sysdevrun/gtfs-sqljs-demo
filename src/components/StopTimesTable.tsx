@@ -12,7 +12,11 @@ interface StopTimesTableProps {
 
 export default function StopTimesTable({ stopTimes, gtfs, selectedTrip, vehicles, agencies }: StopTimesTableProps) {
   // Get agency timezone (use first agency's timezone)
-  const agencyTimezone = agencies.length > 0 ? agencies[0].agency_timezone : undefined
+  if (agencies.length === 0 || !agencies[0].agency_timezone) {
+    throw new Error('Agency timezone is required but not available')
+  }
+  const agencyTimezone = agencies[0].agency_timezone
+
   const getStopById = (stopId: string) => {
     const stops = gtfs.getStops({ stopId })
     return stops.length > 0 ? stops[0] : null
