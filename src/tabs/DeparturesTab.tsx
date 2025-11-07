@@ -61,6 +61,7 @@ export default function DeparturesTab({
   const [loading, setLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [stopRoutesMap, setStopRoutesMap] = useState<Map<string, Set<string>>>(new Map())
+  const [debugInfo, setDebugInfo] = useState<string>('')
 
   // Load routes going through each stop
   useEffect(() => {
@@ -149,18 +150,33 @@ export default function DeparturesTab({
 
     const loadDepartures = async () => {
       setLoading(true)
+      setDebugInfo('')
+
       try {
         const now = new Date()
         const currentTimeSeconds = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()
         const today = now.toISOString().split('T')[0].replace(/-/g, '')
 
+        // Debug info collection
+        let debugLines: string[] = []
+        debugLines.push(`=== DEBUG INFO ===`)
+        debugLines.push(`Current time: ${now.toISOString()} (local: ${now.toLocaleString()})`)
+        debugLines.push(`Current time in seconds: ${currentTimeSeconds} (${formatTime(currentTimeSeconds)})`)
+        debugLines.push(`Today's date string: ${today}`)
+        debugLines.push(`Selected stops: ${selectedStops.length}`)
+        debugLines.push(`Stop names: ${selectedStops.map(s => s.stop_name).join(', ')}`)
+        debugLines.push(``)
+
         const allDepartures: Departure[] = []
+        const allStopTimesChecked: { stopTime: any, tripInfo: any, passed: boolean, reason?: string }[] = []
 
         // Get all trips running today
         const tripsToday = new Map<string, { trip: Trip, route: Route | null }>()
+        let totalTripsLoaded = 0
         for (const route of routes) {
           try {
             const trips = await workerApi.getTrips({ routeId: route.route_id, date: today })
+            totalTripsLoaded += trips.length
             trips.forEach(trip => {
               tripsToday.set(trip.trip_id, { trip, route })
             })
@@ -169,13 +185,33 @@ export default function DeparturesTab({
           }
         }
 
+        debugLines.push(`Total trips loaded for today: ${totalTripsLoaded}`)
+        debugLines.push(`Routes checked: ${routes.length}`)
+        debugLines.push(``)
+
+        let totalStopTimesChecked = 0
+        let filteredByNotToday = 0
+        let filteredByTime = 0
+
         for (const stop of selectedStops) {
           const stopTimes = await workerApi.getStopTimes(stop.stop_id)
+          debugLines.push(`Stop "${stop.stop_name}" (${stop.stop_id}): ${stopTimes.length} stop times`)
 
           for (const stopTime of stopTimes) {
+            totalStopTimesChecked++
+
             // Only process if trip is running today
             const tripInfo = tripsToday.get(stopTime.trip_id)
-            if (!tripInfo) continue
+            if (!tripInfo) {
+              filteredByNotToday++
+              allStopTimesChecked.push({
+                stopTime,
+                tripInfo: null,
+                passed: false,
+                reason: 'Trip not running today'
+              })
+              continue
+            }
 
             // Parse departure time
             const [h, m, s] = stopTime.departure_time.split(':').map(Number)
@@ -199,8 +235,38 @@ export default function DeparturesTab({
                 departureTimeSeconds,
                 realtimeDepartureSeconds
               })
+              allStopTimesChecked.push({
+                stopTime,
+                tripInfo,
+                passed: true
+              })
+            } else {
+              filteredByTime++
+              allStopTimesChecked.push({
+                stopTime,
+                tripInfo,
+                passed: false,
+                reason: `Time ${formatTime(effectiveDepartureSeconds)} < current ${formatTime(currentTimeSeconds)}`
+              })
             }
           }
+        }
+
+        debugLines.push(``)
+        debugLines.push(`Total stop times checked: ${totalStopTimesChecked}`)
+        debugLines.push(`Filtered (trip not running today): ${filteredByNotToday}`)
+        debugLines.push(`Filtered (time in past): ${filteredByTime}`)
+        debugLines.push(`Departures found: ${allDepartures.length}`)
+        debugLines.push(``)
+
+        // Show sample stop times
+        if (allStopTimesChecked.length > 0) {
+          debugLines.push(`Sample of first 10 stop times checked:`)
+          allStopTimesChecked.slice(0, 10).forEach((item, idx) => {
+            const st = item.stopTime
+            const [h, m] = st.departure_time.split(':')
+            debugLines.push(`  ${idx + 1}. Trip ${st.trip_id}: ${h}:${m} - ${item.passed ? 'PASS' : 'FAIL: ' + item.reason}`)
+          })
         }
 
         // Sort by effective departure time and limit
@@ -211,9 +277,11 @@ export default function DeparturesTab({
         })
 
         setDepartures(allDepartures.slice(0, upcomingDeparturesCount))
+        setDebugInfo(debugLines.join('\n'))
         setLoading(false)
       } catch (err) {
         console.error('Error loading departures:', err)
+        setDebugInfo(`Error loading departures: ${err}`)
         setLoading(false)
       }
     }
@@ -332,9 +400,18 @@ export default function DeparturesTab({
             )}
 
             {!loading && selectedCount > 0 && departures.length === 0 && (
-              <Typography color="text.secondary">
-                No upcoming departures found
-              </Typography>
+              <Box>
+                <Typography color="error" variant="h6" sx={{ mb: 2 }}>
+                  No upcoming departures found
+                </Typography>
+                {debugInfo && (
+                  <Paper sx={{ p: 2, bgcolor: 'grey.100', fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                    <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                      {debugInfo}
+                    </pre>
+                  </Paper>
+                )}
+              </Box>
             )}
 
             {!loading && departures.length > 0 && (
