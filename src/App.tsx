@@ -43,6 +43,30 @@ const PRESETS: PresetConfig[] = [
       'https://ara-api.enroute.mobi/irigo/gtfs/vehicle-positions',
       'https://notify.ratpdev.com/api/networks/RD%20ANGERS/alerts/gtfsrt'
     ]
+  },
+  {
+    name: 'Kar\'Ouest',
+    gtfsUrl: 'https://www.data.gouv.fr/api/1/datasets/r/c9c2f609-d0cd-4233-ad1b-cf86b9bf2dc8',
+    gtfsRtUrls: ['https://pysae.com/api/v2/groups/semto-2/gtfs-rt']
+  },
+  {
+    name: 'Alternéo',
+    gtfsUrl: 'https://transport.data.gouv.fr/resources/80676/download',
+    gtfsRtUrls: [
+      'https://proxy.transport.data.gouv.fr/resource/alterneo-civis-gtfs-rt-trip-update',
+      'https://proxy.transport.data.gouv.fr/resource/alterneo-civis-gtfs-rt-service-alert',
+      'https://proxy.transport.data.gouv.fr/resource/alterneo-civis-gtfs-rt-vehicle-position'
+    ]
+  },
+  {
+    name: 'CaRsud',
+    gtfsUrl: 'https://www.data.gouv.fr/api/1/datasets/r/8f3642e3-9fc3-45ed-af46-8c532966ace3',
+    gtfsRtUrls: ['https://zenbus.net/gtfs/rt/poll.proto?src=true&dataset=carsud-reunion']
+  },
+  {
+    name: 'Citalis',
+    gtfsUrl: 'https://pysae.com/api/v2/groups/citalis/gtfs/pub',
+    gtfsRtUrls: ['https://pysae.com/api/v2/groups/citalis/gtfs-rt']
   }
 ]
 
