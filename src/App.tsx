@@ -1,23 +1,44 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { wrap, Remote, proxy } from 'comlink'
 import {
+  ThemeProvider,
+  createTheme,
+  CssBaseline,
+  Box,
+  AppBar,
+  Toolbar,
+  Typography,
+  Tabs,
+  Tab,
+  Container
+} from '@mui/material'
+import {
+  Settings as SettingsIcon,
+  Search as SearchIcon,
+  Schedule as ScheduleIcon,
+  Map as MapIcon,
+  Warning as WarningIcon,
+  DirectionsBus as BusIcon
+} from '@mui/icons-material'
+import {
   Agency,
   Route,
   Trip,
   StopTimeWithRealtime,
   Alert,
-  VehiclePosition
+  VehiclePosition,
+  Stop
 } from 'gtfs-sqljs'
-import ConfigurationPanel from './components/ConfigurationPanel'
-import AgenciesList from './components/AgenciesList'
-import RoutesGrid from './components/RoutesGrid'
-import TripsList from './components/TripsList'
-import StopTimesTable from './components/StopTimesTable'
-import AlertsTable from './components/AlertsTable'
-import VehiclesTable from './components/VehiclesTable'
 import LoadingProgress from './components/LoadingProgress'
 import type { GtfsWorkerAPI, ProgressInfo } from './gtfs.worker'
 import { GtfsApiAdapter } from './utils/GtfsApiAdapter'
+import { loadConfig, saveConfig, AppConfig } from './utils/configStorage'
+import ConfigurationTab from './tabs/ConfigurationTab'
+import BrowseDataTab from './tabs/BrowseDataTab'
+import TimetablesTab from './tabs/TimetablesTab'
+import MapTab from './tabs/MapTab'
+import AlertsTab from './tabs/AlertsTab'
+import DeparturesTab from './tabs/DeparturesTab'
 
 const PROXY_BASE = 'https://gtfs-proxy.sys-dev-run.re/proxy/'
 
@@ -73,15 +94,31 @@ const PRESETS: PresetConfig[] = [
   }
 ]
 
+// Create red theme
+const theme = createTheme({
+  palette: {
+    mode: 'light',
+    primary: {
+      main: '#d32f2f',
+      light: '#ff6659',
+      dark: '#9a0007',
+    },
+    secondary: {
+      main: '#f44336',
+    },
+    error: {
+      main: '#d32f2f',
+    },
+  },
+})
+
 function App() {
-  const [gtfsUrl, setGtfsUrl] = useState('https://pysae.com/api/v2/groups/car-jaune/gtfs/pub')
-  const [gtfsRtUrls, setGtfsRtUrls] = useState<string[]>(['https://pysae.com/api/v2/groups/car-jaune/gtfs-rt'])
-  const [newRtUrl, setNewRtUrl] = useState('')
+  const [config, setConfig] = useState<AppConfig>(loadConfig())
+  const [currentTab, setCurrentTab] = useState(config.selectedTab)
   const [gtfsLoaded, setGtfsLoaded] = useState(false)
   const [loading, setLoading] = useState(false)
   const [loadingProgress, setLoadingProgress] = useState<ProgressInfo | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [autoRefresh, setAutoRefresh] = useState(true)
   const [realtimeLastUpdated, setRealtimeLastUpdated] = useState<number>(0)
 
   // Web Worker reference
@@ -91,6 +128,7 @@ function App() {
   // Data states
   const [agencies, setAgencies] = useState<Agency[]>([])
   const [routes, setRoutes] = useState<Route[]>([])
+  const [stops, setStops] = useState<Stop[]>([])
   const [selectedRoute, setSelectedRoute] = useState<string | null>(null)
   const [trips, setTrips] = useState<Trip[]>([])
   const [selectedTrip, setSelectedTrip] = useState<string | null>(null)
@@ -112,23 +150,10 @@ function App() {
     }
   }, [])
 
-  // Load preset configuration
-  const loadPreset = (preset: PresetConfig) => {
-    setGtfsUrl(preset.gtfsUrl)
-    setGtfsRtUrls(preset.gtfsRtUrls)
-  }
-
-  // Add a new RT URL
-  const addRtUrl = () => {
-    if (newRtUrl.trim() && !gtfsRtUrls.includes(newRtUrl.trim())) {
-      setGtfsRtUrls([...gtfsRtUrls, newRtUrl.trim()])
-      setNewRtUrl('')
-    }
-  }
-
-  // Remove an RT URL
-  const removeRtUrl = (url: string) => {
-    setGtfsRtUrls(gtfsRtUrls.filter(u => u !== url))
+  // Handle tab change
+  const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
+    setCurrentTab(newValue)
+    saveConfig({ selectedTab: newValue })
   }
 
   // Load GTFS data
@@ -143,6 +168,7 @@ function App() {
     // Clear existing data
     setAgencies([])
     setRoutes([])
+    setStops([])
     setTrips([])
     setStopTimes([])
     setAlerts([])
@@ -156,8 +182,8 @@ function App() {
     }
 
     try {
-      const proxiedGtfsUrl = proxyUrl(gtfsUrl)
-      const proxiedRtUrls = gtfsRtUrls.map(url => proxyUrl(url))
+      const proxiedGtfsUrl = proxyUrl(config.gtfsUrl)
+      const proxiedRtUrls = config.gtfsRtUrls.map(url => proxyUrl(url))
 
       // Load GTFS with progress callback
       await workerRef.current.loadGtfs(
@@ -182,6 +208,7 @@ function App() {
 
       // Fetch stops and update API adapter cache
       const stopsData = await workerRef.current.getStops()
+      setStops(stopsData)
       if (gtfsApiRef.current) {
         gtfsApiRef.current.setStops(stopsData)
       }
@@ -198,7 +225,7 @@ function App() {
       setLoadingProgress(null)
       setGtfsLoaded(false)
     }
-  }, [gtfsUrl, gtfsRtUrls])
+  }, [config.gtfsUrl, config.gtfsRtUrls])
 
   const updateRealtimeData = useCallback(async () => {
     if (!workerRef.current || !gtfsLoaded || !gtfsApiRef.current) return
@@ -210,7 +237,6 @@ function App() {
       const vehiclesData = await workerRef.current.getVehiclePositions()
       const tripUpdatesData = await workerRef.current.getTripUpdates()
 
-      // Debug: Log realtime data counts
       console.log(`Realtime data: ${vehiclesData.length} vehicles, ${tripUpdatesData.length} trip updates, ${alertsData.length} alerts`)
 
       // Pre-fetch trip data for all vehicles to populate cache
@@ -235,7 +261,6 @@ function App() {
 
         if (aSort !== bSort) return aSort - bSort
 
-        // If same route or no route, sort by vehicle ID
         const aVehicleId = a.vehicle?.id || ''
         const bVehicleId = b.vehicle?.id || ''
         return aVehicleId.localeCompare(bVehicleId)
@@ -249,12 +274,14 @@ function App() {
     }
   }, [routes, gtfsLoaded])
 
+  // Initial load
   useEffect(() => {
     loadGtfs()
   }, [])
 
+  // Auto-refresh realtime data
   useEffect(() => {
-    if (!workerRef.current || !gtfsLoaded || !autoRefresh) return
+    if (!workerRef.current || !gtfsLoaded || config.updateInterval === 0) return
 
     const interval = setInterval(async () => {
       try {
@@ -263,11 +290,12 @@ function App() {
       } catch (err) {
         console.error('Error fetching realtime data:', err)
       }
-    }, 10000)
+    }, config.updateInterval * 1000)
 
     return () => clearInterval(interval)
-  }, [gtfsLoaded, autoRefresh, updateRealtimeData])
+  }, [gtfsLoaded, config.updateInterval, updateRealtimeData])
 
+  // Load trips for selected route (Browse Data tab)
   useEffect(() => {
     if (!workerRef.current || !gtfsLoaded || !selectedRoute || !gtfsApiRef.current) return
 
@@ -293,25 +321,19 @@ function App() {
     })
   }, [gtfsLoaded, selectedRoute])
 
+  // Load stop times for selected trip (Browse Data tab)
   useEffect(() => {
     if (!workerRef.current || !gtfsLoaded || !selectedTrip) return
 
     workerRef.current.getStopTimes(selectedTrip).then(stopTimesData => {
-      // Debug: Check if realtime data is present
       const withRealtime = stopTimesData.filter(st => st.realtime !== undefined)
       if (withRealtime.length > 0) {
         console.log(`Trip ${selectedTrip}: ${withRealtime.length}/${stopTimesData.length} stop times have realtime data`)
-      } else {
-        console.log(`Trip ${selectedTrip}: No realtime data in stop times`)
       }
 
       setStopTimes(stopTimesData)
     })
   }, [gtfsLoaded, selectedTrip, realtimeLastUpdated])
-
-  const getRouteById = (routeId: string): Route | undefined => {
-    return routes.find((r: Route) => r.route_id === routeId)
-  }
 
   const downloadDatabase = async () => {
     if (!workerRef.current || !gtfsLoaded) return
@@ -322,7 +344,6 @@ function App() {
         return
       }
 
-      // Create a new ArrayBuffer copy to avoid SharedArrayBuffer issues
       const arrayBuffer = new ArrayBuffer(dbBuffer.byteLength)
       const uint8View = new Uint8Array(arrayBuffer)
       uint8View.set(new Uint8Array(dbBuffer.buffer, dbBuffer.byteOffset, dbBuffer.byteLength))
@@ -343,100 +364,137 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
-      {/* Loading Progress Overlay */}
-      {loading && <LoadingProgress progress={loadingProgress} />}
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+        {/* Loading Progress Overlay */}
+        {loading && <LoadingProgress progress={loadingProgress} />}
 
-      {/* Header */}
-      <header className="bg-gradient-to-r from-blue-600 to-blue-700 shadow-lg">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <h1 className="text-3xl font-bold text-white">GTFS Real-Time Explorer</h1>
-          <p className="mt-2 text-blue-100">Explore transit data with gtfs-sqljs (Web Worker)</p>
-        </div>
-      </header>
+        {/* Header */}
+        <AppBar position="static">
+          <Toolbar>
+            <BusIcon sx={{ mr: 2 }} />
+            <Box>
+              <Typography variant="h6" component="div">
+                GTFS Real-Time Explorer
+              </Typography>
+              <Typography variant="caption" sx={{ opacity: 0.9 }}>
+                Explore transit data with gtfs-sqljs
+              </Typography>
+            </Box>
+          </Toolbar>
+        </AppBar>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Configuration Panel */}
-        <ConfigurationPanel
-          presets={PRESETS}
-          gtfsUrl={gtfsUrl}
-          setGtfsUrl={setGtfsUrl}
-          gtfsRtUrls={gtfsRtUrls}
-          setGtfsRtUrls={setGtfsRtUrls}
-          newRtUrl={newRtUrl}
-          setNewRtUrl={setNewRtUrl}
-          loading={loading}
-          error={error}
-          autoRefresh={autoRefresh}
-          setAutoRefresh={setAutoRefresh}
-          gtfs={gtfsLoaded ? {} as any : null}
-          loadGtfs={loadGtfs}
-          loadPreset={loadPreset}
-          addRtUrl={addRtUrl}
-          removeRtUrl={removeRtUrl}
-          downloadDatabase={downloadDatabase}
-        />
+        {/* Tabs */}
+        <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
+          <Container maxWidth="xl">
+            <Tabs value={currentTab} onChange={handleTabChange} variant="scrollable" scrollButtons="auto">
+              <Tab icon={<SettingsIcon />} label="Configuration" />
+              <Tab icon={<SearchIcon />} label="Browse Data" disabled={!gtfsLoaded} />
+              <Tab icon={<ScheduleIcon />} label="Timetables" disabled={!gtfsLoaded} />
+              <Tab icon={<MapIcon />} label="Map" disabled={!gtfsLoaded} />
+              <Tab icon={<WarningIcon />} label="Alerts" disabled={!gtfsLoaded} />
+              <Tab icon={<BusIcon />} label="Departures at Stop" disabled={!gtfsLoaded} />
+            </Tabs>
+          </Container>
+        </Box>
 
-        {gtfsLoaded && (
-          <>
-            {/* Agencies */}
-            <AgenciesList agencies={agencies} />
-
-            {/* Routes */}
-            <RoutesGrid
-              routes={routes}
-              selectedRoute={selectedRoute}
-              setSelectedRoute={setSelectedRoute}
-            />
-
-            {/* Trips */}
-            {selectedRoute && trips.length > 0 && gtfsApiRef.current && (
-              <TripsList
-                trips={trips}
-                selectedTrip={selectedTrip}
-                setSelectedTrip={setSelectedTrip}
-                routes={routes}
-                selectedRoute={selectedRoute}
-                vehicles={vehicles}
-                gtfs={gtfsApiRef.current}
-                agencies={agencies}
+        {/* Tab Content */}
+        <Box sx={{ flexGrow: 1, bgcolor: 'grey.100' }}>
+          <Container maxWidth="xl" sx={{ py: 0 }}>
+            {currentTab === 0 && (
+              <ConfigurationTab
+                config={config}
+                setConfig={setConfig}
+                presets={PRESETS}
+                loading={loading}
+                error={error}
+                loadGtfs={loadGtfs}
+                downloadDatabase={downloadDatabase}
+                gtfsLoaded={gtfsLoaded}
               />
             )}
 
-            {/* Stop Times */}
-            {selectedTrip && stopTimes.length > 0 && gtfsApiRef.current && (
-              <StopTimesTable stopTimes={stopTimes} gtfs={gtfsApiRef.current} selectedTrip={selectedTrip} vehicles={vehicles} agencies={agencies} />
+            {currentTab === 1 && gtfsLoaded && (
+              <BrowseDataTab
+                agencies={agencies}
+                routes={routes}
+                selectedRoute={selectedRoute}
+                setSelectedRoute={setSelectedRoute}
+                trips={trips}
+                selectedTrip={selectedTrip}
+                setSelectedTrip={setSelectedTrip}
+                stopTimes={stopTimes}
+                vehicles={vehicles}
+                gtfsApi={gtfsApiRef.current}
+              />
             )}
 
-            {/* Active Alerts */}
-            <AlertsTable alerts={alerts} getRouteById={getRouteById} />
-
-            {/* Vehicles */}
-            {gtfsApiRef.current && (
-              <VehiclesTable vehicles={vehicles} getRouteById={getRouteById} gtfs={gtfsApiRef.current} realtimeLastUpdated={realtimeLastUpdated} agencies={agencies} />
+            {currentTab === 2 && gtfsLoaded && (
+              <TimetablesTab
+                routes={routes}
+                workerApi={workerRef.current}
+                stops={stops}
+              />
             )}
-          </>
-        )}
-      </main>
 
-      {/* Footer */}
-      <footer className="bg-white border-t border-gray-200 mt-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <p className="text-center text-sm text-gray-600">
-            Powered by{' '}
-            <a
-              href="https://github.com/sysdevrun/gtfs-sqljs"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-600 hover:text-blue-800 font-medium"
-            >
-              gtfs-sqljs
-            </a>
-            {' '}with Web Workers
-          </p>
-        </div>
-      </footer>
-    </div>
+            {currentTab === 3 && gtfsLoaded && (
+              <MapTab
+                vehicles={vehicles}
+                routes={routes}
+                gtfsApi={gtfsApiRef.current}
+              />
+            )}
+
+            {currentTab === 4 && gtfsLoaded && (
+              <AlertsTab
+                alerts={alerts}
+                routes={routes}
+              />
+            )}
+
+            {currentTab === 5 && gtfsLoaded && (
+              <DeparturesTab
+                stops={stops}
+                routes={routes}
+                workerApi={workerRef.current}
+                gtfsApi={gtfsApiRef.current}
+                upcomingDeparturesCount={config.upcomingDeparturesCount}
+                updateInterval={config.updateInterval}
+              />
+            )}
+          </Container>
+        </Box>
+
+        {/* Footer */}
+        <Box
+          component="footer"
+          sx={{
+            py: 3,
+            px: 2,
+            mt: 'auto',
+            bgcolor: 'background.paper',
+            borderTop: 1,
+            borderColor: 'divider'
+          }}
+        >
+          <Container maxWidth="xl">
+            <Typography variant="body2" color="text.secondary" align="center">
+              Powered by{' '}
+              <a
+                href="https://github.com/sysdevrun/gtfs-sqljs"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: theme.palette.primary.main }}
+              >
+                gtfs-sqljs
+              </a>
+              {' '}with Web Workers
+            </Typography>
+          </Container>
+        </Box>
+      </Box>
+    </ThemeProvider>
   )
 }
 
