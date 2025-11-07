@@ -1,4 +1,4 @@
-import { Route, Trip, VehiclePosition, GtfsSqlJs, StopTimeWithRealtime } from 'gtfs-sqljs'
+import { Route, Trip, VehiclePosition, GtfsSqlJs, StopTimeWithRealtime, Agency } from 'gtfs-sqljs'
 import { computeDelayFromTimestamp, formatDelay, getContrastColor } from './utils'
 import RouteLabel from './RouteLabel'
 
@@ -10,6 +10,7 @@ interface TripsListProps {
   selectedRoute: string
   vehicles: VehiclePosition[]
   gtfs: GtfsSqlJs
+  agencies: Agency[]
 }
 
 interface GroupedTrips {
@@ -25,8 +26,15 @@ export default function TripsList({
   routes,
   selectedRoute,
   vehicles,
-  gtfs
+  gtfs,
+  agencies
 }: TripsListProps) {
+  // Get agency timezone (use first agency's timezone)
+  if (agencies.length === 0 || !agencies[0].agency_timezone) {
+    throw new Error('Agency timezone is required but not available')
+  }
+  const agencyTimezone = agencies[0].agency_timezone
+
   const currentRoute = routes.find((r) => r.route_id === selectedRoute)
 
   const groupTripsByHeadsign = (trips: Trip[]): GroupedTrips[] => {
@@ -72,7 +80,7 @@ export default function TripsList({
           }
           // Otherwise compute from arrival timestamp
           if (st.realtime.arrival_time !== undefined) {
-            return computeDelayFromTimestamp(st.arrival_time, st.realtime.arrival_time)
+            return computeDelayFromTimestamp(st.arrival_time, st.realtime.arrival_time, agencyTimezone)
           }
           // Fallback to departure delay
           if (st.realtime.departure_delay !== undefined) {
@@ -80,7 +88,7 @@ export default function TripsList({
           }
           // Or compute from departure timestamp
           if (st.realtime.departure_time !== undefined) {
-            return computeDelayFromTimestamp(st.departure_time, st.realtime.departure_time)
+            return computeDelayFromTimestamp(st.departure_time, st.realtime.departure_time, agencyTimezone)
           }
         }
       }

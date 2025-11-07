@@ -1,4 +1,4 @@
-import { VehiclePosition, Route, GtfsSqlJs, StopTimeWithRealtime } from 'gtfs-sqljs'
+import { VehiclePosition, Route, GtfsSqlJs, StopTimeWithRealtime, Agency } from 'gtfs-sqljs'
 import { getVehicleStatus, getVehicleStatusColor, formatTimeAgo, formatDistance, computeDelayFromTimestamp, formatDelay } from './utils'
 import RouteLabel from './RouteLabel'
 import { getDistance } from 'geolib'
@@ -8,6 +8,7 @@ interface VehiclesTableProps {
   getRouteById: (routeId: string) => Route | undefined
   gtfs: GtfsSqlJs
   realtimeLastUpdated: number
+  agencies: Agency[]
 }
 
 interface GroupedVehicles {
@@ -19,7 +20,13 @@ interface GroupedVehicles {
   routeSortOrder: number
 }
 
-export default function VehiclesTable({ vehicles, getRouteById, gtfs, realtimeLastUpdated }: VehiclesTableProps) {
+export default function VehiclesTable({ vehicles, getRouteById, gtfs, realtimeLastUpdated, agencies }: VehiclesTableProps) {
+  // Get agency timezone (use first agency's timezone)
+  if (agencies.length === 0 || !agencies[0].agency_timezone) {
+    throw new Error('Agency timezone is required but not available')
+  }
+  const agencyTimezone = agencies[0].agency_timezone
+
   const getStopById = (stopId: string) => {
     const stops = gtfs.getStops({ stopId })
     return stops.length > 0 ? stops[0] : null
@@ -41,7 +48,7 @@ export default function VehiclesTable({ vehicles, getRouteById, gtfs, realtimeLa
           }
           // Otherwise compute from arrival timestamp
           if (st.realtime.arrival_time !== undefined) {
-            return computeDelayFromTimestamp(st.arrival_time, st.realtime.arrival_time)
+            return computeDelayFromTimestamp(st.arrival_time, st.realtime.arrival_time, agencyTimezone)
           }
           // Fallback to departure delay
           if (st.realtime.departure_delay !== undefined) {
@@ -49,7 +56,7 @@ export default function VehiclesTable({ vehicles, getRouteById, gtfs, realtimeLa
           }
           // Or compute from departure timestamp
           if (st.realtime.departure_time !== undefined) {
-            return computeDelayFromTimestamp(st.departure_time, st.realtime.departure_time)
+            return computeDelayFromTimestamp(st.departure_time, st.realtime.departure_time, agencyTimezone)
           }
         }
       }

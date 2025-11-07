@@ -1,4 +1,4 @@
-import { StopTimeWithRealtime, GtfsSqlJs, VehiclePosition } from 'gtfs-sqljs'
+import { StopTimeWithRealtime, GtfsSqlJs, VehiclePosition, Agency } from 'gtfs-sqljs'
 import { computeDelayFromTimestamp, applyDelayToTime, unixTimestampToTime } from './utils'
 import { getDistance } from 'geolib'
 
@@ -7,9 +7,16 @@ interface StopTimesTableProps {
   gtfs: GtfsSqlJs
   selectedTrip: string
   vehicles: VehiclePosition[]
+  agencies: Agency[]
 }
 
-export default function StopTimesTable({ stopTimes, gtfs, selectedTrip, vehicles }: StopTimesTableProps) {
+export default function StopTimesTable({ stopTimes, gtfs, selectedTrip, vehicles, agencies }: StopTimesTableProps) {
+  // Get agency timezone (use first agency's timezone)
+  if (agencies.length === 0 || !agencies[0].agency_timezone) {
+    throw new Error('Agency timezone is required but not available')
+  }
+  const agencyTimezone = agencies[0].agency_timezone
+
   const getStopById = (stopId: string) => {
     const stops = gtfs.getStops({ stopId })
     return stops.length > 0 ? stops[0] : null
@@ -66,7 +73,7 @@ export default function StopTimesTable({ stopTimes, gtfs, selectedTrip, vehicles
     // Determine the delay: use provided delay, or compute from realtime timestamp
     let effectiveDelay = delay
     if (effectiveDelay === undefined && realtimeTimestamp !== undefined) {
-      effectiveDelay = computeDelayFromTimestamp(scheduledTime, realtimeTimestamp)
+      effectiveDelay = computeDelayFromTimestamp(scheduledTime, realtimeTimestamp, agencyTimezone)
     }
 
     if (effectiveDelay === undefined) {
@@ -75,7 +82,7 @@ export default function StopTimesTable({ stopTimes, gtfs, selectedTrip, vehicles
 
     // Determine actual time: convert realtime timestamp to HH:MM:SS if available, otherwise apply delay
     const actualTime = realtimeTimestamp !== undefined
-      ? unixTimestampToTime(realtimeTimestamp)
+      ? unixTimestampToTime(realtimeTimestamp, agencyTimezone)
       : applyDelayToTime(scheduledTime, effectiveDelay)
     const delayMinutes = Math.floor(Math.abs(effectiveDelay) / 60)
     const delaySign = effectiveDelay > 0 ? '+' : '-'

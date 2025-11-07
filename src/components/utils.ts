@@ -26,23 +26,35 @@ export const secondsToTime = (totalSeconds: number): string => {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
 }
 
-export const unixTimestampToTime = (timestamp: number): string => {
+export const unixTimestampToTime = (timestamp: number, timezone: string): string => {
   const date = new Date(timestamp * 1000)
-  const hours = date.getHours()
-  const minutes = date.getMinutes()
-  const seconds = date.getSeconds()
-  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+
+  // Use the agency's timezone
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  })
+  return formatter.format(date)
 }
 
-export const computeDelayFromTimestamp = (scheduledTime: string, realtimeTimestamp: number): number => {
+export const computeDelayFromTimestamp = (scheduledTime: string, realtimeTimestamp: number, timezone: string): number => {
   // Get scheduled time in seconds since midnight
   const scheduledSeconds = timeToSeconds(scheduledTime)
 
-  // Get realtime as seconds since midnight
-  const realtimeDate = new Date(realtimeTimestamp * 1000)
-  const realtimeSecondsOfDay = realtimeDate.getHours() * 3600 +
-                                 realtimeDate.getMinutes() * 60 +
-                                 realtimeDate.getSeconds()
+  // Get realtime as seconds since midnight in the agency's timezone
+  const date = new Date(realtimeTimestamp * 1000)
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  })
+  const timeStr = formatter.format(date)
+  const realtimeSecondsOfDay = timeToSeconds(timeStr)
 
   // Handle day wrap-around for GTFS times >= 24:00:00
   let delay = realtimeSecondsOfDay - scheduledSeconds
