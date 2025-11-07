@@ -18,7 +18,7 @@ import {
   Chip,
   Stack
 } from '@mui/material'
-import { Stop, Route, Trip, StopTimeWithRealtime } from 'gtfs-sqljs'
+import { Stop, Route, Trip, StopTimeWithRealtime, Agency } from 'gtfs-sqljs'
 import type { Remote } from 'comlink'
 import type { GtfsWorkerAPI } from '../gtfs.worker'
 import { GtfsApiAdapter } from '../utils/GtfsApiAdapter'
@@ -30,6 +30,7 @@ interface DeparturesTabProps {
   gtfsApi: GtfsApiAdapter | null
   upcomingDeparturesCount: number
   updateInterval: number
+  agencies: Agency[]
 }
 
 interface StopGroup {
@@ -54,7 +55,8 @@ export default function DeparturesTab({
   workerApi,
   gtfsApi,
   upcomingDeparturesCount,
-  updateInterval
+  updateInterval,
+  agencies
 }: DeparturesTabProps) {
   const [stopGroups, setStopGroups] = useState<StopGroup[]>([])
   const [departures, setDepartures] = useState<Departure[]>([])
@@ -62,6 +64,7 @@ export default function DeparturesTab({
   const [searchQuery, setSearchQuery] = useState('')
   const [stopRoutesMap, setStopRoutesMap] = useState<Map<string, Set<string>>>(new Map())
   const [debugInfo, setDebugInfo] = useState<string>('')
+  const [agencyTime, setAgencyTime] = useState<string>('')
 
   // Load routes going through each stop
   useEffect(() => {
@@ -135,6 +138,28 @@ export default function DeparturesTab({
     )
   }
 
+  // Update agency time display every second
+  useEffect(() => {
+    const updateAgencyTime = () => {
+      const agencyTimezone = agencies.length > 0 && agencies[0].agency_timezone
+        ? agencies[0].agency_timezone
+        : Intl.DateTimeFormat().resolvedOptions().timeZone
+
+      const now = new Date()
+      const timeString = now.toLocaleString('en-US', {
+        timeZone: agencyTimezone,
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+      setAgencyTime(timeString)
+    }
+
+    updateAgencyTime() // Initial update
+    const interval = setInterval(updateAgencyTime, 1000)
+    return () => clearInterval(interval)
+  }, [agencies])
+
   // Load departures for selected stops
   useEffect(() => {
     if (!workerApi || !gtfsApi) return
@@ -150,18 +175,45 @@ export default function DeparturesTab({
 
     const loadDepartures = async () => {
       setLoading(true)
-      setDebugInfo('')
 
       try {
         const now = new Date()
-        const currentTimeSeconds = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()
-        const today = now.toISOString().split('T')[0].replace(/-/g, '')
+
+        // Get agency timezone and calculate current time in that timezone
+        const agencyTimezone = agencies.length > 0 && agencies[0].agency_timezone
+          ? agencies[0].agency_timezone
+          : Intl.DateTimeFormat().resolvedOptions().timeZone
+
+        // Get current time in agency timezone
+        const agencyTimeString = now.toLocaleString('en-US', {
+          timeZone: agencyTimezone,
+          hour12: false,
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit'
+        })
+        const [h, m, s] = agencyTimeString.split(':').map(Number)
+        const currentTimeSeconds = h * 3600 + m * 60 + s
+
+        // Update agency time display (HH:MM format)
+        setAgencyTime(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`)
+
+        // Get today's date in agency timezone
+        const agencyDateString = now.toLocaleString('en-US', {
+          timeZone: agencyTimezone,
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit'
+        })
+        const [month, day, year] = agencyDateString.split('/')
+        const today = `${year}${month}${day}`
 
         // Debug info collection
         let debugLines: string[] = []
         debugLines.push(`=== DEBUG INFO ===`)
-        debugLines.push(`Current time: ${now.toISOString()} (local: ${now.toLocaleString()})`)
-        debugLines.push(`Current time in seconds: ${currentTimeSeconds} (${formatTime(currentTimeSeconds)})`)
+        debugLines.push(`Browser time: ${now.toISOString()} (local: ${now.toLocaleString()})`)
+        debugLines.push(`Agency timezone: ${agencyTimezone}`)
+        debugLines.push(`Current time in agency TZ: ${agencyTimeString} (${currentTimeSeconds}s = ${formatTime(currentTimeSeconds)})`)
         debugLines.push(`Today's date string: ${today}`)
         debugLines.push(`Selected stops: ${selectedStops.length}`)
         debugLines.push(`Stop names: ${selectedStops.map(s => s.stop_name).join(', ')}`)
@@ -398,11 +450,25 @@ export default function DeparturesTab({
 
         <Box sx={{ flex: 1 }}>
           <Paper sx={{ p: 2 }}>
-            <Typography variant="h6" gutterBottom>
-              Next Departures
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <Typography variant="h6">
+                  Next Departures
+                </Typography>
+                {loading && departures.length > 0 && (
+                  <Typography variant="caption" color="text.secondary">
+                    (Updating...)
+                  </Typography>
+                )}
+              </Box>
+              {agencyTime && (
+                <Typography variant="h6" sx={{ fontFamily: 'monospace', color: 'text.secondary' }}>
+                  {agencyTime}
+                </Typography>
+              )}
+            </Box>
 
-            {loading && <Typography>Loading departures...</Typography>}
+            {loading && departures.length === 0 && <Typography>Loading departures...</Typography>}
 
             {!loading && selectedCount === 0 && (
               <Typography color="text.secondary">
@@ -425,7 +491,7 @@ export default function DeparturesTab({
               </Box>
             )}
 
-            {!loading && departures.length > 0 && (
+            {departures.length > 0 && (
               <TableContainer>
                 <Table size="small">
                   <TableHead>

@@ -448,6 +448,7 @@ function App() {
                 gtfsApi={gtfsApiRef.current}
                 upcomingDeparturesCount={config.upcomingDeparturesCount}
                 updateInterval={config.updateInterval}
+                agencies={agencies}
               />
             )}
 
