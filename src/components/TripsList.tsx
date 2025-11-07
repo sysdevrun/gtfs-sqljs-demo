@@ -1,6 +1,7 @@
-import { Route, Trip, VehiclePosition, GtfsSqlJs, StopTimeWithRealtime, Agency } from 'gtfs-sqljs'
+import { Route, Trip, VehiclePosition, StopTimeWithRealtime, Agency } from 'gtfs-sqljs'
 import { computeDelayFromTimestamp, formatDelay, getContrastColor } from './utils'
 import RouteLabel from './RouteLabel'
+import type { GtfsApi } from '../types/GtfsApi'
 
 interface TripsListProps {
   trips: Trip[]
@@ -9,7 +10,7 @@ interface TripsListProps {
   routes: Route[]
   selectedRoute: string
   vehicles: VehiclePosition[]
-  gtfs: GtfsSqlJs
+  gtfs: GtfsApi
   agencies: Agency[]
 }
 

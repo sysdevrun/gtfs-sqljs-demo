@@ -398,14 +398,14 @@ function App() {
                 routes={routes}
                 selectedRoute={selectedRoute}
                 vehicles={vehicles}
-                gtfs={gtfsApiRef.current as any}
+                gtfs={gtfsApiRef.current}
                 agencies={agencies}
               />
             )}
 
             {/* Stop Times */}
             {selectedTrip && stopTimes.length > 0 && gtfsApiRef.current && (
-              <StopTimesTable stopTimes={stopTimes} gtfs={gtfsApiRef.current as any} selectedTrip={selectedTrip} vehicles={vehicles} agencies={agencies} />
+              <StopTimesTable stopTimes={stopTimes} gtfs={gtfsApiRef.current} selectedTrip={selectedTrip} vehicles={vehicles} agencies={agencies} />
             )}
 
             {/* Active Alerts */}
@@ -413,7 +413,7 @@ function App() {
 
             {/* Vehicles */}
             {gtfsApiRef.current && (
-              <VehiclesTable vehicles={vehicles} getRouteById={getRouteById} gtfs={gtfsApiRef.current as any} realtimeLastUpdated={realtimeLastUpdated} agencies={agencies} />
+              <VehiclesTable vehicles={vehicles} getRouteById={getRouteById} gtfs={gtfsApiRef.current} realtimeLastUpdated={realtimeLastUpdated} agencies={agencies} />
             )}
           </>
         )}

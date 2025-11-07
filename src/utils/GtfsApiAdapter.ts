@@ -1,12 +1,13 @@
 import { Remote } from 'comlink'
 import type { GtfsWorkerAPI } from '../gtfs.worker'
 import { Stop, Trip, StopTimeWithRealtime } from 'gtfs-sqljs'
+import type { GtfsApi } from '../types/GtfsApi'
 
 /**
  * Adapter class that provides a synchronous-like API on top of the async worker
  * Uses caching to enable synchronous access to frequently needed data
  */
-export class GtfsApiAdapter {
+export class GtfsApiAdapter implements GtfsApi {
   private worker: Remote<GtfsWorkerAPI>
   private stopsCache: Map<string, Stop> = new Map()
   private tripsCache: Map<string, Trip> = new Map()

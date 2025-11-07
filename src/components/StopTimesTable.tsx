@@ -1,10 +1,11 @@
-import { StopTimeWithRealtime, GtfsSqlJs, VehiclePosition, Agency } from 'gtfs-sqljs'
+import { StopTimeWithRealtime, VehiclePosition, Agency } from 'gtfs-sqljs'
 import { computeDelayFromTimestamp, applyDelayToTime, unixTimestampToTime } from './utils'
 import { getDistance } from 'geolib'
+import type { GtfsApi } from '../types/GtfsApi'
 
 interface StopTimesTableProps {
   stopTimes: StopTimeWithRealtime[]
-  gtfs: GtfsSqlJs
+  gtfs: GtfsApi
   selectedTrip: string
   vehicles: VehiclePosition[]
   agencies: Agency[]
