@@ -9,7 +9,8 @@ interface VehiclesTableProps {
 
 export default function VehiclesTable({ vehicles, getRouteById, gtfs }: VehiclesTableProps) {
   const getStopById = (stopId: string) => {
-    return gtfs.getStopById(stopId)
+    const stops = gtfs.getStops({ stopId })
+    return stops.length > 0 ? stops[0] : null
   }
 
   return (
@@ -54,7 +55,8 @@ export default function VehiclesTable({ vehicles, getRouteById, gtfs }: Vehicles
 
                 const route = routeId ? getRouteById(routeId) : null
                 const currentStop = stopId ? getStopById(stopId) : null
-                const trip = tripId ? gtfs.getTripById(tripId) : null
+                const trips = tripId ? gtfs.getTrips({ tripId }) : []
+                const trip = trips.length > 0 ? trips[0] : null
 
                 return (
                   <tr

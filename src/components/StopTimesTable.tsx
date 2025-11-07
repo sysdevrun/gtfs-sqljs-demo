@@ -1,6 +1,5 @@
 import { StopTimeWithRealtime, GtfsSqlJs } from 'gtfs-sqljs'
 import { computeDelayFromTimestamp, applyDelayToTime, unixTimestampToTime } from './utils'
-import { ExtendedStopTimeRealtime } from '../types'
 
 interface StopTimesTableProps {
   stopTimes: StopTimeWithRealtime[]
@@ -9,7 +8,8 @@ interface StopTimesTableProps {
 
 export default function StopTimesTable({ stopTimes, gtfs }: StopTimesTableProps) {
   const getStopById = (stopId: string) => {
-    return gtfs.getStopById(stopId)
+    const stops = gtfs.getStops({ stopId })
+    return stops.length > 0 ? stops[0] : null
   }
 
   const formatTimeWithRealtime = (scheduledTime: string, delay?: number, realtimeTimestamp?: number) => {
@@ -80,10 +80,10 @@ export default function StopTimesTable({ stopTimes, gtfs }: StopTimesTableProps)
                     {stop?.stop_name || st.stop_id}
                   </td>
                   <td className="py-3 px-4 text-sm text-gray-700">
-                    {formatTimeWithRealtime(st.arrival_time, st.realtime?.arrival_delay, (st.realtime as ExtendedStopTimeRealtime)?.arrival_time)}
+                    {formatTimeWithRealtime(st.arrival_time, st.realtime?.arrival_delay, st.realtime?.arrival_time)}
                   </td>
                   <td className="py-3 px-4 text-sm text-gray-700">
-                    {formatTimeWithRealtime(st.departure_time, st.realtime?.departure_delay, (st.realtime as ExtendedStopTimeRealtime)?.departure_time)}
+                    {formatTimeWithRealtime(st.departure_time, st.realtime?.departure_delay, st.realtime?.departure_time)}
                   </td>
                 </tr>
               )
