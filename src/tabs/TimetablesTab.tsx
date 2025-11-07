@@ -173,19 +173,39 @@ export default function TimetablesTab({ routes, workerApi, stops }: TimetablesTa
               Routes
             </Typography>
             <List>
-              {routes.map((route) => (
-                <ListItem key={route.route_id} disablePadding>
-                  <ListItemButton
-                    selected={selectedRoute?.route_id === route.route_id}
-                    onClick={() => setSelectedRoute(route)}
-                  >
-                    <ListItemText
-                      primary={route.route_short_name || route.route_long_name}
-                      secondary={route.route_long_name}
-                    />
-                  </ListItemButton>
-                </ListItem>
-              ))}
+              {routes.map((route) => {
+                const bgColor = route.route_color ? `#${route.route_color}` : '#CCCCCC'
+                const textColor = route.route_text_color ? `#${route.route_text_color}` : '#000000'
+
+                return (
+                  <ListItem key={route.route_id} disablePadding>
+                    <ListItemButton
+                      selected={selectedRoute?.route_id === route.route_id}
+                      onClick={() => setSelectedRoute(route)}
+                    >
+                      <Box
+                        sx={{
+                          display: 'inline-block',
+                          px: 1.5,
+                          py: 0.5,
+                          mr: 1.5,
+                          borderRadius: 1,
+                          backgroundColor: bgColor,
+                          color: textColor,
+                          fontWeight: 'bold',
+                          minWidth: '40px',
+                          textAlign: 'center'
+                        }}
+                      >
+                        {route.route_short_name || route.route_long_name?.substring(0, 3)}
+                      </Box>
+                      <ListItemText
+                        primary={route.route_long_name}
+                      />
+                    </ListItemButton>
+                  </ListItem>
+                )
+              })}
             </List>
           </Paper>
         </Box>

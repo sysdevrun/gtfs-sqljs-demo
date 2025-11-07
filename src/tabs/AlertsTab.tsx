@@ -88,10 +88,13 @@ export default function AlertsTab({ alerts, routes }: AlertsTabProps) {
                           <Chip
                             key={route.route_id}
                             label={route.route_short_name || route.route_long_name}
-                            size="small"
+                            size="medium"
                             sx={{
                               backgroundColor: route.route_color ? `#${route.route_color}` : undefined,
                               color: route.route_text_color ? `#${route.route_text_color}` : undefined,
+                              fontSize: '1rem',
+                              fontWeight: 'bold',
+                              px: 1
                             }}
                           />
                         ))}
