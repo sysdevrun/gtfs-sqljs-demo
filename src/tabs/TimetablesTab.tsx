@@ -16,14 +16,16 @@ import {
   TableRow,
   Alert
 } from '@mui/material'
-import { Route, Trip, StopTimeWithRealtime, Stop } from 'gtfs-sqljs'
+import { Route, Trip, StopTimeWithRealtime, Stop, Agency } from 'gtfs-sqljs'
 import type { Remote } from 'comlink'
 import type { GtfsWorkerAPI } from '../gtfs.worker'
+import { timeToSeconds } from '../components/utils'
 
 interface TimetablesTabProps {
   routes: Route[]
   workerApi: Remote<GtfsWorkerAPI> | null
   stops: Stop[]
+  agencies: Agency[]
 }
 
 interface TripWithTimes {
@@ -37,7 +39,7 @@ interface DirectionGroup {
   trips: Trip[]
 }
 
-export default function TimetablesTab({ routes, workerApi, stops }: TimetablesTabProps) {
+export default function TimetablesTab({ routes, workerApi, stops, agencies }: TimetablesTabProps) {
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0])
   const [selectedRoute, setSelectedRoute] = useState<Route | null>(null)
   const [directions, setDirections] = useState<DirectionGroup[]>([])
@@ -150,6 +152,44 @@ export default function TimetablesTab({ routes, workerApi, stops }: TimetablesTa
   const getPlatform = (stopId: string): string | null => {
     const stop = stops.find(s => s.stop_id === stopId)
     return stop?.platform_code || null
+  }
+
+  const getRealtimeDepartureTime = (stopTime: StopTimeWithRealtime): string | null => {
+    if (!stopTime.realtime) return null
+
+    const agencyTimezone = agencies.length > 0 && agencies[0].agency_timezone
+      ? agencies[0].agency_timezone
+      : Intl.DateTimeFormat().resolvedOptions().timeZone
+
+    // If we have a realtime departure timestamp
+    if (stopTime.realtime.departure_time) {
+      const date = new Date(stopTime.realtime.departure_time * 1000)
+      const timeString = date.toLocaleString('en-US', {
+        timeZone: agencyTimezone,
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      })
+      const [h, m] = timeString.split(':')
+      return `${h}:${m}`
+    }
+
+    // If we have a delay, apply it to the scheduled time
+    if (stopTime.realtime.departure_delay !== undefined) {
+      const scheduledSeconds = timeToSeconds(stopTime.departure_time)
+      const realtimeSeconds = scheduledSeconds + stopTime.realtime.departure_delay
+      const h = Math.floor(realtimeSeconds / 3600) % 24
+      const m = Math.floor((realtimeSeconds % 3600) / 60)
+      return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
+    }
+
+    return null
+  }
+
+  const isToday = (): boolean => {
+    const today = new Date().toISOString().split('T')[0]
+    return selectedDate === today
   }
 
   return (
@@ -277,11 +317,30 @@ export default function TimetablesTab({ routes, workerApi, stops }: TimetablesTa
                               )}
                             </Box>
                           </TableCell>
-                          {timetable.map((tt, tripIdx) => (
-                            <TableCell key={tripIdx} align="center">
-                              {formatTime(tt.stopTimes[stopIdx].departure_time)}
-                            </TableCell>
-                          ))}
+                          {timetable.map((tt, tripIdx) => {
+                            const stopTime = tt.stopTimes[stopIdx]
+                            const scheduledTime = formatTime(stopTime.departure_time)
+                            const realtimeTime = isToday() ? getRealtimeDepartureTime(stopTime) : null
+
+                            return (
+                              <TableCell key={tripIdx} align="center">
+                                {realtimeTime ? (
+                                  <Box>
+                                    <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
+                                      {realtimeTime}
+                                    </Typography>
+                                    <Typography variant="caption" color="text.secondary" display="block">
+                                      {scheduledTime}
+                                    </Typography>
+                                  </Box>
+                                ) : (
+                                  <Typography variant="body2">
+                                    {scheduledTime}
+                                  </Typography>
+                                )}
+                              </TableCell>
+                            )
+                          })}
                         </TableRow>
                       )
                     })}
