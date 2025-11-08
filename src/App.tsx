@@ -123,6 +123,7 @@ function App() {
 
   // Web Worker reference
   const workerRef = useRef<Remote<GtfsWorkerAPI> | null>(null)
+  const rawWorkerRef = useRef<Worker | null>(null)
   const gtfsApiRef = useRef<GtfsApiAdapter | null>(null)
 
   // Data states
@@ -136,19 +137,37 @@ function App() {
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [vehicles, setVehicles] = useState<VehiclePosition[]>([])
 
-  // Initialize worker
-  useEffect(() => {
+  // Helper function to initialize or reinitialize worker
+  const initializeWorker = useCallback(() => {
+    // Terminate existing worker if it exists
+    if (rawWorkerRef.current) {
+      console.log('Terminating existing worker...')
+      rawWorkerRef.current.terminate()
+    }
+
+    // Create new worker
+    console.log('Creating new worker...')
     const worker = new Worker(new URL('./gtfs.worker.ts', import.meta.url), {
       type: 'module'
     })
     const workerApi = wrap<GtfsWorkerAPI>(worker)
+
+    // Update refs
+    rawWorkerRef.current = worker
     workerRef.current = workerApi
     gtfsApiRef.current = new GtfsApiAdapter(workerApi)
+  }, [])
+
+  // Initialize worker on mount
+  useEffect(() => {
+    initializeWorker()
 
     return () => {
-      worker.terminate()
+      if (rawWorkerRef.current) {
+        rawWorkerRef.current.terminate()
+      }
     }
-  }, [])
+  }, [initializeWorker])
 
   // Handle tab change
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
@@ -158,8 +177,6 @@ function App() {
 
   // Load GTFS data
   const loadGtfs = useCallback(async () => {
-    if (!workerRef.current) return
-
     setLoading(true)
     setLoadingProgress(null)
     setError(null)
@@ -176,9 +193,15 @@ function App() {
     setSelectedRoute(null)
     setSelectedTrip(null)
 
-    // Clear API adapter cache
-    if (gtfsApiRef.current) {
-      gtfsApiRef.current.clearCache()
+    // Deregister old worker and register new one
+    console.log('Reinitializing worker for new GTFS data...')
+    initializeWorker()
+
+    // Ensure the new worker is ready
+    if (!workerRef.current) {
+      setError('Failed to initialize worker')
+      setLoading(false)
+      return
     }
 
     try {
@@ -225,7 +248,7 @@ function App() {
       setLoadingProgress(null)
       setGtfsLoaded(false)
     }
-  }, [config.gtfsUrl, config.gtfsRtUrls])
+  }, [config.gtfsUrl, config.gtfsRtUrls, initializeWorker])
 
   const updateRealtimeData = useCallback(async () => {
     if (!workerRef.current || !gtfsLoaded || !gtfsApiRef.current) return
