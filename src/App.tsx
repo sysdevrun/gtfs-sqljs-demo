@@ -422,6 +422,8 @@ function App() {
                 routes={routes}
                 workerApi={workerRef.current}
                 stops={stops}
+                agencies={agencies}
+                vehicles={vehicles}
               />
             )}
 

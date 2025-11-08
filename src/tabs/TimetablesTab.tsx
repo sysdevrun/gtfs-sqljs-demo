@@ -14,16 +14,21 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Alert
+  Alert,
+  Button
 } from '@mui/material'
-import { Route, Trip, StopTimeWithRealtime, Stop } from 'gtfs-sqljs'
+import DirectionsBusIcon from '@mui/icons-material/DirectionsBus'
+import { Route, Trip, StopTimeWithRealtime, Stop, Agency, VehiclePosition } from 'gtfs-sqljs'
 import type { Remote } from 'comlink'
 import type { GtfsWorkerAPI } from '../gtfs.worker'
+import { timeToSeconds } from '../components/utils'
 
 interface TimetablesTabProps {
   routes: Route[]
   workerApi: Remote<GtfsWorkerAPI> | null
   stops: Stop[]
+  agencies: Agency[]
+  vehicles: VehiclePosition[]
 }
 
 interface TripWithTimes {
@@ -37,7 +42,7 @@ interface DirectionGroup {
   trips: Trip[]
 }
 
-export default function TimetablesTab({ routes, workerApi, stops }: TimetablesTabProps) {
+export default function TimetablesTab({ routes, workerApi, stops, agencies, vehicles }: TimetablesTabProps) {
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0])
   const [selectedRoute, setSelectedRoute] = useState<Route | null>(null)
   const [directions, setDirections] = useState<DirectionGroup[]>([])
@@ -152,24 +157,71 @@ export default function TimetablesTab({ routes, workerApi, stops }: TimetablesTa
     return stop?.platform_code || null
   }
 
+  const getRealtimeDepartureTime = (stopTime: StopTimeWithRealtime): string | null => {
+    if (!stopTime.realtime) return null
+
+    const agencyTimezone = agencies.length > 0 && agencies[0].agency_timezone
+      ? agencies[0].agency_timezone
+      : Intl.DateTimeFormat().resolvedOptions().timeZone
+
+    // If we have a realtime departure timestamp
+    if (stopTime.realtime.departure_time) {
+      const date = new Date(stopTime.realtime.departure_time * 1000)
+      const timeString = date.toLocaleString('en-US', {
+        timeZone: agencyTimezone,
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      })
+      const [h, m] = timeString.split(':')
+      return `${h}:${m}`
+    }
+
+    // If we have a delay, apply it to the scheduled time
+    if (stopTime.realtime.departure_delay !== undefined) {
+      const scheduledSeconds = timeToSeconds(stopTime.departure_time)
+      const realtimeSeconds = scheduledSeconds + stopTime.realtime.departure_delay
+      const h = Math.floor(realtimeSeconds / 3600) % 24
+      const m = Math.floor((realtimeSeconds % 3600) / 60)
+      return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
+    }
+
+    return null
+  }
+
+  const isToday = (): boolean => {
+    const today = new Date().toISOString().split('T')[0]
+    return selectedDate === today
+  }
+
+  const getVehicleStatus = (tripId: string, stopId: string): 'at-stop' | 'approaching' | null => {
+    if (!isToday()) return null
+
+    const vehicle = vehicles.find(v => v.trip_id === tripId)
+    if (!vehicle) return null
+
+    // Check if vehicle is at this stop
+    if (vehicle.stop_id === stopId && vehicle.current_status === 1) {
+      return 'at-stop'
+    }
+
+    // Check if vehicle is approaching this stop (INCOMING_AT or IN_TRANSIT_TO)
+    if (vehicle.stop_id === stopId && (vehicle.current_status === 0 || vehicle.current_status === 2)) {
+      return 'approaching'
+    }
+
+    return null
+  }
+
   return (
     <Box sx={{ p: 3 }}>
-      <Paper sx={{ p: 3, mb: 3 }}>
-        <Typography variant="h6" gutterBottom>
-          Select Date
-        </Typography>
-        <TextField
-          type="date"
-          value={selectedDate}
-          onChange={(e) => setSelectedDate(e.target.value)}
-          fullWidth
-          InputLabelProps={{ shrink: true }}
-        />
-      </Paper>
-
-      <Box sx={{ display: 'flex', gap: 3, flexDirection: { xs: 'column', md: 'row' } }}>
-        <Box sx={{ flex: { xs: '1', md: '0 0 33%' } }}>
-          <Paper sx={{ p: 2, height: '600px', overflow: 'auto' }}>
+      {/* part1: Top controls (Route + Date + Direction) */}
+      <Box sx={{ display: 'flex', gap: 3, mb: 3, flexDirection: { xs: 'column', md: 'row' } }}>
+        {/* part1-left: Route selection + Direction selection */}
+        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {/* Route selection */}
+          <Paper sx={{ p: 2, height: '300px', overflow: 'auto' }}>
             <Typography variant="h6" gutterBottom>
               Routes
             </Typography>
@@ -209,32 +261,89 @@ export default function TimetablesTab({ routes, workerApi, stops }: TimetablesTa
               })}
             </List>
           </Paper>
+
+          {/* Direction selection (horizontal buttons, 50% width each) */}
+          {selectedRoute && directions.length > 0 && (
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              {directions.map((dir) => {
+                const bgColor = selectedRoute.route_color ? `#${selectedRoute.route_color}` : '#CCCCCC'
+                const textColor = selectedRoute.route_text_color ? `#${selectedRoute.route_text_color}` : '#000000'
+                const isSelected = selectedDirection?.directionId === dir.directionId
+
+                return (
+                  <Button
+                    key={dir.directionId}
+                    variant="outlined"
+                    onClick={() => setSelectedDirection(dir)}
+                    sx={{
+                      flex: 1,
+                      backgroundColor: 'white',
+                      borderColor: isSelected ? 'primary.main' : 'grey.300',
+                      borderWidth: isSelected ? 2 : 1,
+                      '&:hover': {
+                        backgroundColor: 'grey.50',
+                        borderColor: isSelected ? 'primary.main' : 'grey.400'
+                      },
+                      justifyContent: 'flex-start',
+                      textTransform: 'none',
+                      py: 1.5
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, width: '100%' }}>
+                      {/* Route badge */}
+                      <Box
+                        sx={{
+                          display: 'inline-flex',
+                          px: 1.5,
+                          py: 0.5,
+                          borderRadius: 1,
+                          backgroundColor: bgColor,
+                          color: textColor,
+                          fontWeight: 'bold',
+                          minWidth: '40px',
+                          justifyContent: 'center',
+                          flexShrink: 0
+                        }}
+                      >
+                        <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                          {selectedRoute.route_short_name || selectedRoute.route_long_name?.substring(0, 3)}
+                        </Typography>
+                      </Box>
+
+                      {/* Direction info */}
+                      <Box sx={{ textAlign: 'left', flex: 1 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'text.primary' }}>
+                          {dir.headsign}
+                        </Typography>
+                        <Typography variant="caption" display="block" sx={{ color: 'text.secondary' }}>
+                          {dir.trips.length} trips
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </Button>
+                )
+              })}
+            </Box>
+          )}
         </Box>
 
-        <Box sx={{ flex: 1 }}>
-          {selectedRoute && (
-            <Paper sx={{ p: 2, mb: 3 }}>
-              <Typography variant="h6" gutterBottom>
-                Directions for {selectedRoute.route_short_name || selectedRoute.route_long_name}
-              </Typography>
-              <List>
-                {directions.map((dir) => (
-                  <ListItem key={dir.directionId} disablePadding>
-                    <ListItemButton
-                      selected={selectedDirection?.directionId === dir.directionId}
-                      onClick={() => setSelectedDirection(dir)}
-                    >
-                      <ListItemText
-                        primary={dir.headsign}
-                        secondary={`${dir.trips.length} trips`}
-                      />
-                    </ListItemButton>
-                  </ListItem>
-                ))}
-              </List>
-            </Paper>
-          )}
+        {/* part1-right: Date selection */}
+        <Paper sx={{ p: 2, width: { xs: '100%', md: '280px' } }}>
+          <Typography variant="h6" gutterBottom>
+            Date
+          </Typography>
+          <TextField
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            fullWidth
+            InputLabelProps={{ shrink: true }}
+          />
+        </Paper>
+      </Box>
 
+      {/* part2: Bottom - Timetable table */}
+      <Box>
           {error && (
             <Alert severity="error" sx={{ mb: 3 }}>
               {error}
@@ -277,20 +386,99 @@ export default function TimetablesTab({ routes, workerApi, stops }: TimetablesTa
                               )}
                             </Box>
                           </TableCell>
-                          {timetable.map((tt, tripIdx) => (
-                            <TableCell key={tripIdx} align="center">
-                              {formatTime(tt.stopTimes[stopIdx].departure_time)}
-                            </TableCell>
-                          ))}
+                          {timetable.map((tt, tripIdx) => {
+                            const stopTime = tt.stopTimes[stopIdx]
+                            const scheduledTime = formatTime(stopTime.departure_time)
+                            const realtimeTime = isToday() ? getRealtimeDepartureTime(stopTime) : null
+                            const vehicleStatus = getVehicleStatus(tt.trip.trip_id, stopTime.stop_id)
+
+                            return (
+                              <TableCell key={tripIdx} align="center">
+                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
+                                  {vehicleStatus === 'at-stop' && (
+                                    <DirectionsBusIcon
+                                      sx={{
+                                        fontSize: 16,
+                                        color: 'success.main',
+                                        flexShrink: 0
+                                      }}
+                                    />
+                                  )}
+                                  {vehicleStatus === 'approaching' && (
+                                    <DirectionsBusIcon
+                                      sx={{
+                                        fontSize: 16,
+                                        color: 'warning.main',
+                                        flexShrink: 0,
+                                        '@keyframes pulse': {
+                                          '0%, 100%': {
+                                            opacity: 1,
+                                            transform: 'scale(1)'
+                                          },
+                                          '50%': {
+                                            opacity: 0.7,
+                                            transform: 'scale(0.95)'
+                                          }
+                                        },
+                                        animation: 'pulse 1.5s ease-in-out infinite'
+                                      }}
+                                    />
+                                  )}
+                                  <Box>
+                                    {realtimeTime ? (
+                                      <Box>
+                                        <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'black' }}>
+                                          {realtimeTime}
+                                        </Typography>
+                                        <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: '0.65rem' }}>
+                                          {scheduledTime}
+                                        </Typography>
+                                      </Box>
+                                    ) : (
+                                      <Typography variant="body2">
+                                        {scheduledTime}
+                                      </Typography>
+                                    )}
+                                  </Box>
+                                </Box>
+                              </TableCell>
+                            )
+                          })}
                         </TableRow>
                       )
                     })}
                   </TableBody>
                 </Table>
               </TableContainer>
+
+              {/* Legend */}
+              <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+                <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 'bold', mb: 1 }}>
+                  Legend
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <DirectionsBusIcon
+                      sx={{
+                        fontSize: 16,
+                        color: 'success.main'
+                      }}
+                    />
+                    <Typography variant="caption">Vehicle at stop</Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <DirectionsBusIcon
+                      sx={{
+                        fontSize: 16,
+                        color: 'warning.main'
+                      }}
+                    />
+                    <Typography variant="caption">Vehicle approaching (animated)</Typography>
+                  </Box>
+                </Box>
+              </Box>
             </Paper>
           )}
-        </Box>
       </Box>
     </Box>
   )
