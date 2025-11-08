@@ -63,6 +63,9 @@ export interface GtfsWorkerAPI {
 
   // Database methods
   getDatabase: () => Uint8Array | null
+
+  // Stop list methods
+  buildOrderedStopList: (tripIds: string[]) => Stop[]
 }
 
 class GtfsWorker implements GtfsWorkerAPI {
@@ -209,6 +212,13 @@ class GtfsWorker implements GtfsWorkerAPI {
     }
     const db = this.gtfs.getDatabase()
     return db.export()
+  }
+
+  buildOrderedStopList(tripIds: string[]): Stop[] {
+    if (!this.gtfs) {
+      throw new Error('GTFS not loaded')
+    }
+    return this.gtfs.buildOrderedStopList(tripIds)
   }
 }
 
