@@ -1,5 +1,6 @@
 import { Box, TextField, Button, Typography, Paper, Stack } from '@mui/material'
 import { AppConfig, saveConfig } from '../utils/configStorage'
+import { Agency, Alert, VehiclePosition } from 'gtfs-sqljs'
 
 interface PresetConfig {
   name: string
@@ -16,6 +17,11 @@ interface ConfigurationTabProps {
   loadGtfs: () => void
   downloadDatabase: () => void
   gtfsLoaded: boolean
+  agencies: Agency[]
+  routesCount: number
+  vehicles: VehiclePosition[]
+  alerts: Alert[]
+  realtimeLastUpdated: number
 }
 
 export default function ConfigurationTab({
@@ -26,7 +32,12 @@ export default function ConfigurationTab({
   error,
   loadGtfs,
   downloadDatabase,
-  gtfsLoaded
+  gtfsLoaded,
+  agencies,
+  routesCount,
+  vehicles,
+  alerts,
+  realtimeLastUpdated
 }: ConfigurationTabProps) {
   const updateConfig = (updates: Partial<AppConfig>) => {
     const newConfig = { ...config, ...updates }
@@ -191,6 +202,83 @@ export default function ConfigurationTab({
           </Box>
         )}
       </Paper>
+
+      {gtfsLoaded && (
+        <Paper sx={{ p: 3, mb: 3 }}>
+          <Typography variant="h6" gutterBottom>
+            Debug Data
+          </Typography>
+
+          <Box sx={{ fontFamily: 'monospace', fontSize: '0.9rem' }}>
+            {/* Agency Timezone */}
+            {agencies.length > 0 && (
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>
+                  Agency Timezone:
+                </Typography>
+                <Typography>
+                  {agencies[0].agency_timezone || 'Not specified'}
+                </Typography>
+              </Box>
+            )}
+
+            {/* Current Times */}
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>
+                Time Information:
+              </Typography>
+              <Typography>Browser timezone: {Intl.DateTimeFormat().resolvedOptions().timeZone}</Typography>
+              <Typography>Browser current time: {new Date().toLocaleString()}</Typography>
+              {agencies.length > 0 && agencies[0].agency_timezone && (
+                <Typography>
+                  Agency time: {new Date().toLocaleString('en-US', { timeZone: agencies[0].agency_timezone })}
+                </Typography>
+              )}
+              <Typography>UTC time: {new Date().toISOString()}</Typography>
+            </Box>
+
+            {/* Agencies */}
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>
+                Agencies ({agencies.length}):
+              </Typography>
+              {agencies.map(agency => (
+                <Typography key={agency.agency_id}>
+                  - {agency.agency_name} ({agency.agency_id})
+                  {agency.agency_timezone && ` - ${agency.agency_timezone}`}
+                </Typography>
+              ))}
+            </Box>
+
+            {/* Routes */}
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>
+                Number of routes:
+              </Typography>
+              <Typography>{routesCount}</Typography>
+            </Box>
+
+            {/* Real-time Updates */}
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>
+                Real-time Data:
+              </Typography>
+              <Typography>Vehicle positions: {vehicles.length}</Typography>
+              {vehicles.length > 0 && vehicles[0].timestamp && (
+                <Typography>
+                  Latest vehicle update: {Math.floor((Date.now() - vehicles[0].timestamp * 1000) / 1000)}s ago
+                </Typography>
+              )}
+              <Typography>Active alerts: {alerts.length}</Typography>
+              {realtimeLastUpdated > 0 && (
+                <Typography>
+                  Last realtime fetch: {Math.floor((Date.now() - realtimeLastUpdated) / 1000)}s ago
+                </Typography>
+              )}
+            </Box>
+          </Box>
+        </Paper>
+      )}
     </Box>
   )
 }

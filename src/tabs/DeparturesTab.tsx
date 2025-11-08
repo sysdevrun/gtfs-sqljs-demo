@@ -18,7 +18,7 @@ import {
   Chip,
   Stack
 } from '@mui/material'
-import { Stop, Route, Trip, StopTimeWithRealtime } from 'gtfs-sqljs'
+import { Stop, Route, Trip, StopTimeWithRealtime, Agency } from 'gtfs-sqljs'
 import type { Remote } from 'comlink'
 import type { GtfsWorkerAPI } from '../gtfs.worker'
 import { GtfsApiAdapter } from '../utils/GtfsApiAdapter'
@@ -30,6 +30,7 @@ interface DeparturesTabProps {
   gtfsApi: GtfsApiAdapter | null
   upcomingDeparturesCount: number
   updateInterval: number
+  agencies: Agency[]
 }
 
 interface StopGroup {
@@ -54,7 +55,8 @@ export default function DeparturesTab({
   workerApi,
   gtfsApi,
   upcomingDeparturesCount,
-  updateInterval
+  updateInterval,
+  agencies
 }: DeparturesTabProps) {
   const [stopGroups, setStopGroups] = useState<StopGroup[]>([])
   const [departures, setDepartures] = useState<Departure[]>([])
@@ -62,6 +64,7 @@ export default function DeparturesTab({
   const [searchQuery, setSearchQuery] = useState('')
   const [stopRoutesMap, setStopRoutesMap] = useState<Map<string, Set<string>>>(new Map())
   const [debugInfo, setDebugInfo] = useState<string>('')
+  const [agencyTime, setAgencyTime] = useState<string>('')
 
   // Load routes going through each stop
   useEffect(() => {
@@ -135,6 +138,28 @@ export default function DeparturesTab({
     )
   }
 
+  // Update agency time display every second
+  useEffect(() => {
+    const updateAgencyTime = () => {
+      const agencyTimezone = agencies.length > 0 && agencies[0].agency_timezone
+        ? agencies[0].agency_timezone
+        : Intl.DateTimeFormat().resolvedOptions().timeZone
+
+      const now = new Date()
+      const timeString = now.toLocaleString('en-US', {
+        timeZone: agencyTimezone,
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+      setAgencyTime(timeString)
+    }
+
+    updateAgencyTime() // Initial update
+    const interval = setInterval(updateAgencyTime, 1000)
+    return () => clearInterval(interval)
+  }, [agencies])
+
   // Load departures for selected stops
   useEffect(() => {
     if (!workerApi || !gtfsApi) return
@@ -150,18 +175,45 @@ export default function DeparturesTab({
 
     const loadDepartures = async () => {
       setLoading(true)
-      setDebugInfo('')
 
       try {
         const now = new Date()
-        const currentTimeSeconds = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()
-        const today = now.toISOString().split('T')[0].replace(/-/g, '')
+
+        // Get agency timezone and calculate current time in that timezone
+        const agencyTimezone = agencies.length > 0 && agencies[0].agency_timezone
+          ? agencies[0].agency_timezone
+          : Intl.DateTimeFormat().resolvedOptions().timeZone
+
+        // Get current time in agency timezone
+        const agencyTimeString = now.toLocaleString('en-US', {
+          timeZone: agencyTimezone,
+          hour12: false,
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit'
+        })
+        const [h, m, s] = agencyTimeString.split(':').map(Number)
+        const currentTimeSeconds = h * 3600 + m * 60 + s
+
+        // Update agency time display (HH:MM format)
+        setAgencyTime(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`)
+
+        // Get today's date in agency timezone
+        const agencyDateString = now.toLocaleString('en-US', {
+          timeZone: agencyTimezone,
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit'
+        })
+        const [month, day, year] = agencyDateString.split('/')
+        const today = `${year}${month}${day}`
 
         // Debug info collection
         let debugLines: string[] = []
         debugLines.push(`=== DEBUG INFO ===`)
-        debugLines.push(`Current time: ${now.toISOString()} (local: ${now.toLocaleString()})`)
-        debugLines.push(`Current time in seconds: ${currentTimeSeconds} (${formatTime(currentTimeSeconds)})`)
+        debugLines.push(`Browser time: ${now.toISOString()} (local: ${now.toLocaleString()})`)
+        debugLines.push(`Agency timezone: ${agencyTimezone}`)
+        debugLines.push(`Current time in agency TZ: ${agencyTimeString} (${currentTimeSeconds}s = ${formatTime(currentTimeSeconds)})`)
         debugLines.push(`Today's date string: ${today}`)
         debugLines.push(`Selected stops: ${selectedStops.length}`)
         debugLines.push(`Stop names: ${selectedStops.map(s => s.stop_name).join(', ')}`)
@@ -192,65 +244,76 @@ export default function DeparturesTab({
         let totalStopTimesChecked = 0
         let filteredByNotToday = 0
         let filteredByTime = 0
+        let tripsProcessed = 0
 
-        for (const stop of selectedStops) {
-          const stopTimes = await workerApi.getStopTimes(stop.stop_id)
-          debugLines.push(`Stop "${stop.stop_name}" (${stop.stop_id}): ${stopTimes.length} stop times`)
+        // Create a set of selected stop IDs for quick lookup
+        const selectedStopIds = new Set(selectedStops.map(s => s.stop_id))
 
-          for (const stopTime of stopTimes) {
-            totalStopTimesChecked++
+        // Iterate through all trips running today
+        for (const [tripId, tripInfo] of tripsToday) {
+          try {
+            // Get stop times for this trip (CORRECT - using trip_id)
+            const stopTimes = await workerApi.getStopTimes(tripId)
+            tripsProcessed++
 
-            // Only process if trip is running today
-            const tripInfo = tripsToday.get(stopTime.trip_id)
-            if (!tripInfo) {
-              filteredByNotToday++
-              allStopTimesChecked.push({
-                stopTime,
-                tripInfo: null,
-                passed: false,
-                reason: 'Trip not running today'
-              })
-              continue
+            // Filter stop times to only those at selected stops
+            const relevantStopTimes = stopTimes.filter(st => selectedStopIds.has(st.stop_id))
+
+            if (relevantStopTimes.length > 0) {
+              debugLines.push(`Trip ${tripId}: ${relevantStopTimes.length} stop times at selected stops`)
             }
 
-            // Parse departure time
-            const [h, m, s] = stopTime.departure_time.split(':').map(Number)
-            const departureTimeSeconds = h * 3600 + m * 60 + s
+            for (const stopTime of relevantStopTimes) {
+              totalStopTimesChecked++
 
-            // Get realtime departure if available
-            let realtimeDepartureSeconds: number | null = null
-            if (stopTime.realtime?.departure_time) {
-              realtimeDepartureSeconds = stopTime.realtime.departure_time
+              // Find the corresponding stop object
+              const stop = selectedStops.find(s => s.stop_id === stopTime.stop_id)
+              if (!stop) continue
+
+              // Parse departure time
+              const [h, m, s] = stopTime.departure_time.split(':').map(Number)
+              const departureTimeSeconds = h * 3600 + m * 60 + s
+
+              // Get realtime departure if available
+              let realtimeDepartureSeconds: number | null = null
+              if (stopTime.realtime?.departure_time) {
+                realtimeDepartureSeconds = stopTime.realtime.departure_time
+              }
+
+              const effectiveDepartureSeconds = realtimeDepartureSeconds ?? departureTimeSeconds
+
+              // Only include upcoming departures (with tolerance for times past midnight)
+              if (effectiveDepartureSeconds >= currentTimeSeconds || departureTimeSeconds >= 24 * 3600) {
+                allDepartures.push({
+                  trip: tripInfo.trip,
+                  route: tripInfo.route,
+                  stopTime,
+                  stop,
+                  departureTimeSeconds,
+                  realtimeDepartureSeconds
+                })
+                allStopTimesChecked.push({
+                  stopTime,
+                  tripInfo,
+                  passed: true
+                })
+              } else {
+                filteredByTime++
+                allStopTimesChecked.push({
+                  stopTime,
+                  tripInfo,
+                  passed: false,
+                  reason: `Time ${formatTime(effectiveDepartureSeconds)} < current ${formatTime(currentTimeSeconds)}`
+                })
+              }
             }
-
-            const effectiveDepartureSeconds = realtimeDepartureSeconds ?? departureTimeSeconds
-
-            // Only include upcoming departures (with tolerance for times past midnight)
-            if (effectiveDepartureSeconds >= currentTimeSeconds || departureTimeSeconds >= 24 * 3600) {
-              allDepartures.push({
-                trip: tripInfo.trip,
-                route: tripInfo.route,
-                stopTime,
-                stop,
-                departureTimeSeconds,
-                realtimeDepartureSeconds
-              })
-              allStopTimesChecked.push({
-                stopTime,
-                tripInfo,
-                passed: true
-              })
-            } else {
-              filteredByTime++
-              allStopTimesChecked.push({
-                stopTime,
-                tripInfo,
-                passed: false,
-                reason: `Time ${formatTime(effectiveDepartureSeconds)} < current ${formatTime(currentTimeSeconds)}`
-              })
-            }
+          } catch (err) {
+            console.error(`Error processing trip ${tripId}:`, err)
           }
         }
+
+        debugLines.push(``)
+        debugLines.push(`Trips processed: ${tripsProcessed}`)
 
         debugLines.push(``)
         debugLines.push(`Total stop times checked: ${totalStopTimesChecked}`)
@@ -296,18 +359,32 @@ export default function DeparturesTab({
   }, [stopGroups, workerApi, gtfsApi, routes, upcomingDeparturesCount, updateInterval])
 
   const formatTime = (seconds: number): string => {
-    const h = Math.floor(seconds / 3600)
+    const h = Math.floor(seconds / 3600) % 24  // Use modulo 24 for times >= 24h
     const m = Math.floor((seconds % 3600) / 60)
     return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
   }
 
   const formatDepartureTime = (departureSeconds: number, realtimeSeconds: number | null): string => {
+    // Get current time in agency timezone
+    const agencyTimezone = agencies.length > 0 && agencies[0].agency_timezone
+      ? agencies[0].agency_timezone
+      : Intl.DateTimeFormat().resolvedOptions().timeZone
+
     const now = new Date()
-    const currentTimeSeconds = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()
+    const agencyTimeString = now.toLocaleString('en-US', {
+      timeZone: agencyTimezone,
+      hour12: false,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    })
+    const [h, m, s] = agencyTimeString.split(':').map(Number)
+    const currentTimeSeconds = h * 3600 + m * 60 + s
+
     const effectiveSeconds = realtimeSeconds ?? departureSeconds
     const minutesUntil = Math.floor((effectiveSeconds - currentTimeSeconds) / 60)
 
-    if (minutesUntil < 60) {
+    if (minutesUntil >= 0 && minutesUntil < 60) {
       return `${minutesUntil} min.`
     }
 
@@ -387,11 +464,25 @@ export default function DeparturesTab({
 
         <Box sx={{ flex: 1 }}>
           <Paper sx={{ p: 2 }}>
-            <Typography variant="h6" gutterBottom>
-              Next Departures
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <Typography variant="h6">
+                  Next Departures
+                </Typography>
+                {loading && departures.length > 0 && (
+                  <Typography variant="caption" color="text.secondary">
+                    (Updating...)
+                  </Typography>
+                )}
+              </Box>
+              {agencyTime && (
+                <Typography variant="h6" sx={{ fontFamily: 'monospace', color: 'text.secondary' }}>
+                  {agencyTime}
+                </Typography>
+              )}
+            </Box>
 
-            {loading && <Typography>Loading departures...</Typography>}
+            {loading && departures.length === 0 && <Typography>Loading departures...</Typography>}
 
             {!loading && selectedCount === 0 && (
               <Typography color="text.secondary">
@@ -414,7 +505,7 @@ export default function DeparturesTab({
               </Box>
             )}
 
-            {!loading && departures.length > 0 && (
+            {departures.length > 0 && (
               <TableContainer>
                 <Table size="small">
                   <TableHead>

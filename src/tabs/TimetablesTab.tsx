@@ -138,7 +138,8 @@ export default function TimetablesTab({ routes, workerApi, stops }: TimetablesTa
   const formatTime = (timeStr: string): string => {
     if (!timeStr) return ''
     const [h, m] = timeStr.split(':')
-    return `${h}:${m}`
+    const hours = (parseInt(h, 10) % 24).toString().padStart(2, '0')  // Use modulo 24 for times >= 24h
+    return `${hours}:${m}`
   }
 
   const getStopName = (stopId: string): string => {

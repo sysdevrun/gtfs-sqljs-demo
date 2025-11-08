@@ -448,6 +448,7 @@ function App() {
                 gtfsApi={gtfsApiRef.current}
                 upcomingDeparturesCount={config.upcomingDeparturesCount}
                 updateInterval={config.updateInterval}
+                agencies={agencies}
               />
             )}
 
@@ -461,6 +462,11 @@ function App() {
                 loadGtfs={loadGtfs}
                 downloadDatabase={downloadDatabase}
                 gtfsLoaded={gtfsLoaded}
+                agencies={agencies}
+                routesCount={routes.length}
+                vehicles={vehicles}
+                alerts={alerts}
+                realtimeLastUpdated={realtimeLastUpdated}
               />
             )}
           </Container>
