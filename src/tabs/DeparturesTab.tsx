@@ -77,10 +77,10 @@ export default function DeparturesTab({
 
       for (const route of routes) {
         try {
-          const trips = await workerApi.getTrips({ routeId: route.route_id, date: today })
+          const trips = await workerApi.getTrips({ routeId: route.route_id, date: today, includeRealtime: true })
 
           for (const trip of trips) {
-            const stopTimes = await workerApi.getStopTimes(trip.trip_id)
+            const stopTimes = await workerApi.getStopTimes({ tripId: trip.trip_id, includeRealtime: true })
             stopTimes.forEach(st => {
               if (!stopRoutes.has(st.stop_id)) {
                 stopRoutes.set(st.stop_id, new Set())
@@ -227,7 +227,7 @@ export default function DeparturesTab({
         let totalTripsLoaded = 0
         for (const route of routes) {
           try {
-            const trips = await workerApi.getTrips({ routeId: route.route_id, date: today })
+            const trips = await workerApi.getTrips({ routeId: route.route_id, date: today, includeRealtime: true })
             totalTripsLoaded += trips.length
             trips.forEach(trip => {
               tripsToday.set(trip.trip_id, { trip, route })
@@ -253,7 +253,7 @@ export default function DeparturesTab({
         for (const [tripId, tripInfo] of tripsToday) {
           try {
             // Get stop times for this trip (CORRECT - using trip_id)
-            const stopTimes = await workerApi.getStopTimes(tripId)
+            const stopTimes = await workerApi.getStopTimes({ tripId, includeRealtime: true })
             tripsProcessed++
 
             // Filter stop times to only those at selected stops

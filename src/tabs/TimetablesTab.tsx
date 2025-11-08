@@ -57,7 +57,7 @@ export default function TimetablesTab({ routes, workerApi, stops }: TimetablesTa
 
     const dateString = selectedDate.replace(/-/g, '')
 
-    workerApi.getTrips({ routeId: selectedRoute.route_id, date: dateString }).then((trips) => {
+    workerApi.getTrips({ routeId: selectedRoute.route_id, date: dateString, includeRealtime: true }).then((trips) => {
       // Group by direction_id
       const groupsMap = new Map<number, DirectionGroup>()
 
@@ -96,7 +96,7 @@ export default function TimetablesTab({ routes, workerApi, stops }: TimetablesTa
         const tripsWithTimes: TripWithTimes[] = []
 
         for (const trip of selectedDirection.trips) {
-          const stopTimes = await workerApi.getStopTimes(trip.trip_id)
+          const stopTimes = await workerApi.getStopTimes({ tripId: trip.trip_id, includeRealtime: true })
           tripsWithTimes.push({ trip, stopTimes })
         }
 

@@ -231,7 +231,7 @@ function App() {
     if (!workerRef.current || !gtfsLoaded || !gtfsApiRef.current) return
 
     try {
-      const alertsData = await workerRef.current.getAlerts()
+      const alertsData = await workerRef.current.getAlerts({ activeOnly: true })
       setAlerts(alertsData)
 
       const vehiclesData = await workerRef.current.getVehiclePositions()
@@ -301,7 +301,7 @@ function App() {
 
     const today = new Date().toISOString().slice(0, 10).replace(/-/g, '')
 
-    workerRef.current.getTrips({ routeId: selectedRoute, date: today }).then(async tripsData => {
+    workerRef.current.getTrips({ routeId: selectedRoute, date: today, includeRealtime: true }).then(async tripsData => {
       const sortedTrips = tripsData.sort((a: Trip, b: Trip) => {
         const aName = a.trip_short_name || a.trip_id
         const bName = b.trip_short_name || b.trip_id
@@ -325,7 +325,7 @@ function App() {
   useEffect(() => {
     if (!workerRef.current || !gtfsLoaded || !selectedTrip) return
 
-    workerRef.current.getStopTimes(selectedTrip).then(stopTimesData => {
+    workerRef.current.getStopTimes({ tripId: selectedTrip, includeRealtime: true }).then(stopTimesData => {
       const withRealtime = stopTimesData.filter(st => st.realtime !== undefined)
       if (withRealtime.length > 0) {
         console.log(`Trip ${selectedTrip}: ${withRealtime.length}/${stopTimesData.length} stop times have realtime data`)
