@@ -219,127 +219,135 @@ export default function DeparturesTab({
         debugLines.push(`Stop names: ${selectedStops.map(s => s.stop_name).join(', ')}`)
         debugLines.push(``)
 
+        // EFFICIENT APPROACH: Get active service IDs for today
+        const activeServiceIds = await workerApi.getActiveServiceIds(today)
+
+        if (activeServiceIds.length === 0) {
+          debugLines.push(`⚠️ No active services for date: ${today}`)
+          setDebugInfo(debugLines.join('\n'))
+          setDepartures([])
+          setLoading(false)
+          return
+        }
+
+        debugLines.push(`Active service IDs: ${activeServiceIds.join(', ')}`)
+        debugLines.push(``)
+
+        // EFFICIENT APPROACH: Single query for all stop times at selected stops
+        const selectedStopIds = selectedStops.map(s => s.stop_id)
+
+        const startQueryTime = performance.now()
+        const allStopTimes = await workerApi.getStopTimes({
+          stopId: selectedStopIds,
+          serviceIds: activeServiceIds,
+          includeRealtime: true,
+        })
+        const queryTime = performance.now() - startQueryTime
+
+        debugLines.push(`⚡ Query time: ${queryTime.toFixed(2)}ms`)
+        debugLines.push(`Total stop times retrieved: ${allStopTimes.length}`)
+        debugLines.push(``)
+
+        // Filter and process departures
         const allDepartures: Departure[] = []
-        const allStopTimesChecked: { stopTime: any, tripInfo: any, passed: boolean, reason?: string }[] = []
-
-        // Get all trips running today
-        const tripsToday = new Map<string, { trip: Trip, route: Route | null }>()
-        let totalTripsLoaded = 0
-        for (const route of routes) {
-          try {
-            const trips = await workerApi.getTrips({ routeId: route.route_id, date: today, includeRealtime: true })
-            totalTripsLoaded += trips.length
-            trips.forEach(trip => {
-              tripsToday.set(trip.trip_id, { trip, route })
-            })
-          } catch (err) {
-            console.error('Error loading trips:', err)
-          }
-        }
-
-        debugLines.push(`Total trips loaded for today: ${totalTripsLoaded}`)
-        debugLines.push(`Routes checked: ${routes.length}`)
-        debugLines.push(``)
-
-        let totalStopTimesChecked = 0
-        let filteredByNotToday = 0
         let filteredByTime = 0
-        let tripsProcessed = 0
+        let filteredByCanceled = 0
+        let filteredBySkipped = 0
 
-        // Create a set of selected stop IDs for quick lookup
-        const selectedStopIds = new Set(selectedStops.map(s => s.stop_id))
+        for (const stopTime of allStopTimes) {
+          // Find the corresponding stop object
+          const stop = selectedStops.find(s => s.stop_id === stopTime.stop_id)
+          if (!stop) continue
 
-        // Iterate through all trips running today
-        for (const [tripId, tripInfo] of tripsToday) {
-          try {
-            // Get stop times for this trip (CORRECT - using trip_id)
-            const stopTimes = await workerApi.getStopTimes({ tripId, includeRealtime: true })
-            tripsProcessed++
+          // Filter out CANCELED and SKIPPED trips (CORRECT LOGIC)
+          if (stopTime.realtime?.schedule_relationship === 3) {  // CANCELED
+            filteredByCanceled++
+            continue
+          }
+          if (stopTime.realtime?.schedule_relationship === 4) {  // SKIPPED
+            filteredBySkipped++
+            continue
+          }
 
-            // Filter stop times to only those at selected stops
-            const relevantStopTimes = stopTimes.filter(st => selectedStopIds.has(st.stop_id))
+          // Parse scheduled departure time
+          const [h, m, s] = stopTime.departure_time.split(':').map(Number)
+          const departureTimeSeconds = h * 3600 + m * 60 + s
 
-            if (relevantStopTimes.length > 0) {
-              debugLines.push(`Trip ${tripId}: ${relevantStopTimes.length} stop times at selected stops`)
-            }
+          // Get realtime departure if available (use absolute time)
+          let realtimeDepartureSeconds: number | null = null
+          if (stopTime.realtime?.departure_time) {
+            realtimeDepartureSeconds = stopTime.realtime.departure_time
+          }
 
-            for (const stopTime of relevantStopTimes) {
-              totalStopTimesChecked++
+          const effectiveDepartureSeconds = realtimeDepartureSeconds ?? departureTimeSeconds
 
-              // Find the corresponding stop object
-              const stop = selectedStops.find(s => s.stop_id === stopTime.stop_id)
-              if (!stop) continue
-
-              // Parse departure time
-              const [h, m, s] = stopTime.departure_time.split(':').map(Number)
-              const departureTimeSeconds = h * 3600 + m * 60 + s
-
-              // Get realtime departure if available
-              let realtimeDepartureSeconds: number | null = null
-              if (stopTime.realtime?.departure_time) {
-                realtimeDepartureSeconds = stopTime.realtime.departure_time
-              }
-
-              const effectiveDepartureSeconds = realtimeDepartureSeconds ?? departureTimeSeconds
-
-              // Only include upcoming departures (with tolerance for times past midnight)
-              if (effectiveDepartureSeconds >= currentTimeSeconds || departureTimeSeconds >= 24 * 3600) {
-                allDepartures.push({
-                  trip: tripInfo.trip,
-                  route: tripInfo.route,
-                  stopTime,
-                  stop,
-                  departureTimeSeconds,
-                  realtimeDepartureSeconds
-                })
-                allStopTimesChecked.push({
-                  stopTime,
-                  tripInfo,
-                  passed: true
-                })
-              } else {
-                filteredByTime++
-                allStopTimesChecked.push({
-                  stopTime,
-                  tripInfo,
-                  passed: false,
-                  reason: `Time ${formatTime(effectiveDepartureSeconds)} < current ${formatTime(currentTimeSeconds)}`
-                })
-              }
-            }
-          } catch (err) {
-            console.error(`Error processing trip ${tripId}:`, err)
+          // Only include upcoming departures (with tolerance for times past midnight)
+          if (effectiveDepartureSeconds >= currentTimeSeconds || departureTimeSeconds >= 24 * 3600) {
+            allDepartures.push({
+              trip: null as any, // Will be enriched below
+              route: null,
+              stopTime,
+              stop,
+              departureTimeSeconds,
+              realtimeDepartureSeconds
+            })
+          } else {
+            filteredByTime++
           }
         }
 
-        debugLines.push(``)
-        debugLines.push(`Trips processed: ${tripsProcessed}`)
-
-        debugLines.push(``)
-        debugLines.push(`Total stop times checked: ${totalStopTimesChecked}`)
-        debugLines.push(`Filtered (trip not running today): ${filteredByNotToday}`)
         debugLines.push(`Filtered (time in past): ${filteredByTime}`)
-        debugLines.push(`Departures found: ${allDepartures.length}`)
+        debugLines.push(`Filtered (CANCELED trips): ${filteredByCanceled}`)
+        debugLines.push(`Filtered (SKIPPED stops): ${filteredBySkipped}`)
+        debugLines.push(`Departures (before enrichment): ${allDepartures.length}`)
         debugLines.push(``)
 
-        // Show sample stop times
-        if (allStopTimesChecked.length > 0) {
-          debugLines.push(`Sample of first 10 stop times checked:`)
-          allStopTimesChecked.slice(0, 10).forEach((item, idx) => {
-            const st = item.stopTime
-            const [h, m] = st.departure_time.split(':')
-            debugLines.push(`  ${idx + 1}. Trip ${st.trip_id}: ${h}:${m} - ${item.passed ? 'PASS' : 'FAIL: ' + item.reason}`)
+        // Enrich with trip and route data
+        const tripIds = [...new Set(allDepartures.map(d => d.stopTime.trip_id))]
+        debugLines.push(`Unique trips to enrich: ${tripIds.length}`)
+
+        const trips = await workerApi.getTrips({ tripId: tripIds, includeRealtime: true })
+        const tripMap = new Map(trips.map(t => [t.trip_id, t]))
+
+        const routeIds = [...new Set(trips.map(t => t.route_id))]
+        const routesData = await workerApi.getRoutes({ routeId: routeIds })
+        const routeMap = new Map(routesData.map(r => [r.route_id, r]))
+
+        // Enrich departures with trip and route data
+        allDepartures.forEach(dep => {
+          const trip = tripMap.get(dep.stopTime.trip_id)
+          if (trip) {
+            dep.trip = trip
+            dep.route = routeMap.get(trip.route_id) || null
+          }
+        })
+
+        // Remove departures without trip data
+        const enrichedDepartures = allDepartures.filter(d => d.trip !== null)
+
+        debugLines.push(`Departures after enrichment: ${enrichedDepartures.length}`)
+        debugLines.push(``)
+
+        // Show sample departures
+        if (enrichedDepartures.length > 0) {
+          debugLines.push(`Sample of first 10 departures:`)
+          enrichedDepartures.slice(0, 10).forEach((dep, idx) => {
+            const scheduledTime = formatTime(dep.departureTimeSeconds)
+            const effectiveTime = formatTime(dep.realtimeDepartureSeconds ?? dep.departureTimeSeconds)
+            const delay = dep.realtimeDepartureSeconds ? ` (${dep.realtimeDepartureSeconds > dep.departureTimeSeconds ? '+' : ''}${Math.round((dep.realtimeDepartureSeconds - dep.departureTimeSeconds) / 60)}min)` : ''
+            const status = dep.stopTime.realtime?.schedule_relationship === 1 ? ' [ADDED]' : ''
+            debugLines.push(`  ${idx + 1}. ${dep.route?.route_short_name || 'N/A'} to ${dep.trip.trip_headsign}: ${scheduledTime} → ${effectiveTime}${delay}${status}`)
           })
         }
 
         // Sort by effective departure time and limit
-        allDepartures.sort((a, b) => {
+        enrichedDepartures.sort((a, b) => {
           const aTime = a.realtimeDepartureSeconds ?? a.departureTimeSeconds
           const bTime = b.realtimeDepartureSeconds ?? b.departureTimeSeconds
           return aTime - bTime
         })
 
-        setDepartures(allDepartures.slice(0, upcomingDeparturesCount))
+        setDepartures(enrichedDepartures.slice(0, upcomingDeparturesCount))
         setDebugInfo(debugLines.join('\n'))
         setLoading(false)
       } catch (err) {
@@ -356,7 +364,7 @@ export default function DeparturesTab({
       const interval = setInterval(loadDepartures, updateInterval * 1000)
       return () => clearInterval(interval)
     }
-  }, [stopGroups, workerApi, gtfsApi, routes, upcomingDeparturesCount, updateInterval])
+  }, [stopGroups, workerApi, gtfsApi, routes, upcomingDeparturesCount, updateInterval, agencies])
 
   const formatTime = (seconds: number): string => {
     const h = Math.floor(seconds / 3600) % 24  // Use modulo 24 for times >= 24h
