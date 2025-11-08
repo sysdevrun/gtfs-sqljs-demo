@@ -14,7 +14,8 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Alert
+  Alert,
+  Button
 } from '@mui/material'
 import { Route, Trip, StopTimeWithRealtime, Stop, Agency, VehiclePosition } from 'gtfs-sqljs'
 import type { Remote } from 'comlink'
@@ -216,91 +217,87 @@ export default function TimetablesTab({ routes, workerApi, stops, agencies, vehi
     <Box sx={{ p: 3 }}>
       {/* part1: Top controls (Route + Date + Direction) */}
       <Box sx={{ display: 'flex', gap: 3, mb: 3, flexDirection: { xs: 'column', md: 'row' } }}>
-        {/* part1-left: Route selection */}
-        <Paper sx={{ flex: 1, p: 2, height: '300px', overflow: 'auto' }}>
-          <Typography variant="h6" gutterBottom>
-            Routes
-          </Typography>
-          <List>
-            {routes.map((route) => {
-              const bgColor = route.route_color ? `#${route.route_color}` : '#CCCCCC'
-              const textColor = route.route_text_color ? `#${route.route_text_color}` : '#000000'
-
-              return (
-                <ListItem key={route.route_id} disablePadding>
-                  <ListItemButton
-                    selected={selectedRoute?.route_id === route.route_id}
-                    onClick={() => setSelectedRoute(route)}
-                  >
-                    <Box
-                      sx={{
-                        display: 'inline-block',
-                        px: 1.5,
-                        py: 0.5,
-                        mr: 1.5,
-                        borderRadius: 1,
-                        backgroundColor: bgColor,
-                        color: textColor,
-                        fontWeight: 'bold',
-                        minWidth: '40px',
-                        textAlign: 'center'
-                      }}
-                    >
-                      {route.route_short_name || route.route_long_name?.substring(0, 3)}
-                    </Box>
-                    <ListItemText
-                      primary={route.route_long_name}
-                    />
-                  </ListItemButton>
-                </ListItem>
-              )
-            })}
-          </List>
-        </Paper>
-
-        {/* part1-right: Date + Direction (vertical split) */}
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, width: { xs: '100%', md: '280px' } }}>
-          {/* top: Date selection */}
-          <Paper sx={{ p: 2 }}>
+        {/* part1-left: Route selection + Direction selection */}
+        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {/* Route selection */}
+          <Paper sx={{ p: 2, height: '300px', overflow: 'auto' }}>
             <Typography variant="h6" gutterBottom>
-              Date
+              Routes
             </Typography>
-            <TextField
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              fullWidth
-              InputLabelProps={{ shrink: true }}
-            />
-          </Paper>
+            <List>
+              {routes.map((route) => {
+                const bgColor = route.route_color ? `#${route.route_color}` : '#CCCCCC'
+                const textColor = route.route_text_color ? `#${route.route_text_color}` : '#000000'
 
-          {/* bottom: Direction selection (if route selected) */}
-          {selectedRoute && (
-            <Paper sx={{ p: 2, flex: 1, overflow: 'auto' }}>
-              <Typography variant="h6" gutterBottom>
-                Direction
-              </Typography>
-              <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
-                {selectedRoute.route_short_name || selectedRoute.route_long_name}
-              </Typography>
-              <List>
-                {directions.map((dir) => (
-                  <ListItem key={dir.directionId} disablePadding>
+                return (
+                  <ListItem key={route.route_id} disablePadding>
                     <ListItemButton
-                      selected={selectedDirection?.directionId === dir.directionId}
-                      onClick={() => setSelectedDirection(dir)}
+                      selected={selectedRoute?.route_id === route.route_id}
+                      onClick={() => setSelectedRoute(route)}
                     >
+                      <Box
+                        sx={{
+                          display: 'inline-block',
+                          px: 1.5,
+                          py: 0.5,
+                          mr: 1.5,
+                          borderRadius: 1,
+                          backgroundColor: bgColor,
+                          color: textColor,
+                          fontWeight: 'bold',
+                          minWidth: '40px',
+                          textAlign: 'center'
+                        }}
+                      >
+                        {route.route_short_name || route.route_long_name?.substring(0, 3)}
+                      </Box>
                       <ListItemText
-                        primary={dir.headsign}
-                        secondary={`${dir.trips.length} trips`}
+                        primary={route.route_long_name}
                       />
                     </ListItemButton>
                   </ListItem>
-                ))}
-              </List>
-            </Paper>
+                )
+              })}
+            </List>
+          </Paper>
+
+          {/* Direction selection (horizontal buttons, 50% width each) */}
+          {selectedRoute && directions.length > 0 && (
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              {directions.map((dir) => (
+                <Button
+                  key={dir.directionId}
+                  variant={selectedDirection?.directionId === dir.directionId ? 'contained' : 'outlined'}
+                  onClick={() => setSelectedDirection(dir)}
+                  sx={{ flex: 1 }}
+                >
+                  <Box>
+                    <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                      {dir.headsign}
+                    </Typography>
+                    <Typography variant="caption" display="block">
+                      {dir.trips.length} trips
+                    </Typography>
+                  </Box>
+                </Button>
+              ))}
+            </Box>
           )}
         </Box>
+
+        {/* part1-right: Date selection */}
+        <Paper sx={{ p: 2, width: { xs: '100%', md: '280px' } }}>
+          <Typography variant="h6" gutterBottom>
+            Date
+          </Typography>
+          <TextField
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            fullWidth
+            InputLabelProps={{ shrink: true }}
+          />
+        </Paper>
       </Box>
 
       {/* part2: Bottom - Timetable table */}
