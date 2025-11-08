@@ -1,6 +1,13 @@
 import { Remote } from 'comlink'
 import type { GtfsWorkerAPI } from '../gtfs.worker'
-import { Stop, Trip, StopTimeWithRealtime } from 'gtfs-sqljs'
+import {
+  Stop,
+  Trip,
+  StopTimeWithRealtime,
+  StopFilters,
+  TripFilters,
+  StopTimeFilters
+} from 'gtfs-sqljs'
 import type { GtfsApi } from '../types/GtfsApi'
 
 /**
@@ -24,9 +31,10 @@ export class GtfsApiAdapter implements GtfsApi {
     })
   }
 
-  getStops(options?: { stopId?: string }): Stop[] {
-    if (options?.stopId) {
-      const stop = this.stopsCache.get(options.stopId)
+  getStops(filters?: StopFilters): Stop[] {
+    if (filters?.stopId) {
+      const stopId = Array.isArray(filters.stopId) ? filters.stopId[0] : filters.stopId
+      const stop = this.stopsCache.get(stopId)
       return stop ? [stop] : []
     }
     return Array.from(this.stopsCache.values())
@@ -35,8 +43,8 @@ export class GtfsApiAdapter implements GtfsApi {
   async fetchAndCacheTripData(tripId: string): Promise<{ trip: Trip | null; stopTimes: StopTimeWithRealtime[] }> {
     try {
       const [trips, stopTimes] = await Promise.all([
-        this.worker.getTrips({ tripId }),
-        this.worker.getStopTimes(tripId)
+        this.worker.getTrips({ tripId, includeRealtime: true }),
+        this.worker.getStopTimes({ tripId, includeRealtime: true })
       ])
 
       if (trips.length > 0) {
@@ -52,18 +60,23 @@ export class GtfsApiAdapter implements GtfsApi {
     }
   }
 
-  getTrips(options?: { tripId?: string; routeId?: string; date?: string }): Trip[] {
-    if (options?.tripId) {
-      const trip = this.tripsCache.get(options.tripId)
+  getTrips(filters?: TripFilters): Trip[] {
+    if (filters?.tripId) {
+      const tripId = Array.isArray(filters.tripId) ? filters.tripId[0] : filters.tripId
+      const trip = this.tripsCache.get(tripId)
       return trip ? [trip] : []
     }
     // For other queries, return empty - these should be fetched via worker directly
     return []
   }
 
-  getStopTimes(options: { tripId: string; includeRealtime?: boolean }): StopTimeWithRealtime[] {
-    const cached = this.stopTimesCache.get(options.tripId)
-    return cached || []
+  getStopTimes(filters?: StopTimeFilters): StopTimeWithRealtime[] {
+    if (filters?.tripId) {
+      const tripId = Array.isArray(filters.tripId) ? filters.tripId[0] : filters.tripId
+      const cached = this.stopTimesCache.get(tripId)
+      return cached || []
+    }
+    return []
   }
 
   clearCache() {

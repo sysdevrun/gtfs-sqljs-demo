@@ -8,7 +8,15 @@ import {
   Alert,
   VehiclePosition,
   TripUpdate,
-  Stop
+  Stop,
+  AgencyFilters,
+  RouteFilters,
+  TripFilters,
+  StopFilters,
+  StopTimeFilters,
+  AlertFilters,
+  VehiclePositionFilters,
+  TripUpdateFilters
 } from 'gtfs-sqljs'
 
 export interface ProgressInfo {
@@ -22,18 +30,38 @@ export interface ProgressInfo {
   message: string
 }
 
+// Extended Trip filters that includes date (converted to serviceIds internally)
+export interface ExtendedTripFilters extends Omit<TripFilters, 'serviceIds'> {
+  date?: string
+  serviceIds?: string | string[]
+}
+
+// Extended StopTime filters that includes date (converted to serviceIds internally)
+export interface ExtendedStopTimeFilters extends Omit<StopTimeFilters, 'serviceIds'> {
+  date?: string
+  serviceIds?: string | string[]
+}
+
 export interface GtfsWorkerAPI {
+  // Lifecycle methods
   loadGtfs: (gtfsUrl: string, gtfsRtUrls: string[], onProgress: (progress: ProgressInfo) => void) => Promise<void>
   clearData: () => Promise<void>
-  getAgencies: () => Agency[]
-  getRoutes: () => Route[]
-  getTrips: (options?: { routeId?: string; tripId?: string; date?: string }) => Trip[]
-  getStopTimes: (tripId: string) => StopTimeWithRealtime[]
-  getStops: (options?: { stopId?: string }) => Stop[]
-  getAlerts: () => Alert[]
-  getVehiclePositions: () => VehiclePosition[]
-  getTripUpdates: () => TripUpdate[]
+
+  // Query methods - matching gtfs-sqljs interface
+  getAgencies: (filters?: AgencyFilters) => Agency[]
+  getRoutes: (filters?: RouteFilters) => Route[]
+  getTrips: (filters?: ExtendedTripFilters) => Trip[]
+  getStops: (filters?: StopFilters) => Stop[]
+  getStopTimes: (filters?: ExtendedStopTimeFilters) => StopTimeWithRealtime[]
+  getAlerts: (filters?: AlertFilters) => Alert[]
+  getVehiclePositions: (filters?: VehiclePositionFilters) => VehiclePosition[]
+  getTripUpdates: (filters?: TripUpdateFilters) => TripUpdate[]
+
+  // Realtime methods
   fetchRealtimeData: () => Promise<void>
+  getActiveServiceIds: (date: string) => string[]
+
+  // Database methods
   getDatabase: () => Uint8Array | null
 }
 
@@ -89,78 +117,83 @@ class GtfsWorker implements GtfsWorkerAPI {
     }
   }
 
-  getAgencies(): Agency[] {
+  getAgencies(filters?: AgencyFilters): Agency[] {
     if (!this.gtfs) {
       throw new Error('GTFS not loaded')
     }
-    return this.gtfs.getAgencies()
+    return this.gtfs.getAgencies(filters)
   }
 
-  getRoutes(): Route[] {
+  getRoutes(filters?: RouteFilters): Route[] {
     if (!this.gtfs) {
       throw new Error('GTFS not loaded')
     }
-    return this.gtfs.getRoutes()
+    return this.gtfs.getRoutes(filters)
   }
 
-  getTrips(options?: { routeId?: string; tripId?: string; date?: string }): Trip[] {
+  getTrips(filters?: ExtendedTripFilters): Trip[] {
     if (!this.gtfs) {
       throw new Error('GTFS not loaded')
     }
 
-    if (!options) {
-      return this.gtfs.getTrips()
+    // Convert date to serviceIds if provided
+    if (filters?.date && !filters.serviceIds) {
+      const serviceIds = this.gtfs.getActiveServiceIds(filters.date)
+      const { date, ...restFilters } = filters
+      return this.gtfs.getTrips({ ...restFilters, serviceIds })
     }
 
-    return this.gtfs.getTrips({
-      routeId: options.routeId,
-      tripId: options.tripId,
-      date: options.date,
-      includeRealtime: true
-    })
+    return this.gtfs.getTrips(filters)
   }
 
-  getStopTimes(tripId: string): StopTimeWithRealtime[] {
+  getStopTimes(filters?: ExtendedStopTimeFilters): StopTimeWithRealtime[] {
     if (!this.gtfs) {
       throw new Error('GTFS not loaded')
     }
-    return this.gtfs.getStopTimes({
-      tripId,
-      includeRealtime: true
-    }) as StopTimeWithRealtime[]
+
+    // Convert date to serviceIds if provided
+    if (filters?.date && !filters.serviceIds) {
+      const serviceIds = this.gtfs.getActiveServiceIds(filters.date)
+      const { date, ...restFilters } = filters
+      return this.gtfs.getStopTimes({ ...restFilters, serviceIds }) as StopTimeWithRealtime[]
+    }
+
+    return this.gtfs.getStopTimes(filters) as StopTimeWithRealtime[]
   }
 
-  getStops(options?: { stopId?: string }): Stop[] {
+  getStops(filters?: StopFilters): Stop[] {
     if (!this.gtfs) {
       throw new Error('GTFS not loaded')
     }
-
-    if (!options || !options.stopId) {
-      return this.gtfs.getStops()
-    }
-
-    return this.gtfs.getStops({ stopId: options.stopId })
+    return this.gtfs.getStops(filters)
   }
 
-  getAlerts(): Alert[] {
+  getAlerts(filters?: AlertFilters): Alert[] {
     if (!this.gtfs) {
       throw new Error('GTFS not loaded')
     }
-    return this.gtfs.getAlerts({ activeOnly: true })
+    return this.gtfs.getAlerts(filters)
   }
 
-  getVehiclePositions(): VehiclePosition[] {
+  getVehiclePositions(filters?: VehiclePositionFilters): VehiclePosition[] {
     if (!this.gtfs) {
       throw new Error('GTFS not loaded')
     }
-    return this.gtfs.getVehiclePositions()
+    return this.gtfs.getVehiclePositions(filters)
   }
 
-  getTripUpdates(): TripUpdate[] {
+  getTripUpdates(filters?: TripUpdateFilters): TripUpdate[] {
     if (!this.gtfs) {
       throw new Error('GTFS not loaded')
     }
-    return this.gtfs.getTripUpdates()
+    return this.gtfs.getTripUpdates(filters)
+  }
+
+  getActiveServiceIds(date: string): string[] {
+    if (!this.gtfs) {
+      throw new Error('GTFS not loaded')
+    }
+    return this.gtfs.getActiveServiceIds(date)
   }
 
   async fetchRealtimeData(): Promise<void> {
