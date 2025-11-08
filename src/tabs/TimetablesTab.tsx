@@ -16,7 +16,7 @@ import {
   TableRow,
   Alert
 } from '@mui/material'
-import { Route, Trip, StopTimeWithRealtime, Stop, Agency } from 'gtfs-sqljs'
+import { Route, Trip, StopTimeWithRealtime, Stop, Agency, VehiclePosition } from 'gtfs-sqljs'
 import type { Remote } from 'comlink'
 import type { GtfsWorkerAPI } from '../gtfs.worker'
 import { timeToSeconds } from '../components/utils'
@@ -26,6 +26,7 @@ interface TimetablesTabProps {
   workerApi: Remote<GtfsWorkerAPI> | null
   stops: Stop[]
   agencies: Agency[]
+  vehicles: VehiclePosition[]
 }
 
 interface TripWithTimes {
@@ -39,7 +40,7 @@ interface DirectionGroup {
   trips: Trip[]
 }
 
-export default function TimetablesTab({ routes, workerApi, stops, agencies }: TimetablesTabProps) {
+export default function TimetablesTab({ routes, workerApi, stops, agencies, vehicles }: TimetablesTabProps) {
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0])
   const [selectedRoute, setSelectedRoute] = useState<Route | null>(null)
   const [directions, setDirections] = useState<DirectionGroup[]>([])
@@ -192,6 +193,25 @@ export default function TimetablesTab({ routes, workerApi, stops, agencies }: Ti
     return selectedDate === today
   }
 
+  const getVehicleStatus = (tripId: string, stopId: string): 'at-stop' | 'approaching' | null => {
+    if (!isToday()) return null
+
+    const vehicle = vehicles.find(v => v.trip_id === tripId)
+    if (!vehicle) return null
+
+    // Check if vehicle is at this stop
+    if (vehicle.stop_id === stopId && vehicle.current_status === 1) {
+      return 'at-stop'
+    }
+
+    // Check if vehicle is approaching this stop (INCOMING_AT or IN_TRANSIT_TO)
+    if (vehicle.stop_id === stopId && (vehicle.current_status === 0 || vehicle.current_status === 2)) {
+      return 'approaching'
+    }
+
+    return null
+  }
+
   return (
     <Box sx={{ p: 3 }}>
       <Paper sx={{ p: 3, mb: 3 }}>
@@ -321,23 +341,50 @@ export default function TimetablesTab({ routes, workerApi, stops, agencies }: Ti
                             const stopTime = tt.stopTimes[stopIdx]
                             const scheduledTime = formatTime(stopTime.departure_time)
                             const realtimeTime = isToday() ? getRealtimeDepartureTime(stopTime) : null
+                            const vehicleStatus = getVehicleStatus(tt.trip.trip_id, stopTime.stop_id)
 
                             return (
                               <TableCell key={tripIdx} align="center">
-                                {realtimeTime ? (
+                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
+                                  {vehicleStatus === 'at-stop' && (
+                                    <Box
+                                      sx={{
+                                        width: 8,
+                                        height: 8,
+                                        borderRadius: '50%',
+                                        bgcolor: 'success.main',
+                                        flexShrink: 0
+                                      }}
+                                    />
+                                  )}
+                                  {vehicleStatus === 'approaching' && (
+                                    <Box
+                                      sx={{
+                                        width: 8,
+                                        height: 8,
+                                        borderRadius: '50%',
+                                        bgcolor: 'info.main',
+                                        flexShrink: 0
+                                      }}
+                                    />
+                                  )}
                                   <Box>
-                                    <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
-                                      {realtimeTime}
-                                    </Typography>
-                                    <Typography variant="caption" color="text.secondary" display="block">
-                                      {scheduledTime}
-                                    </Typography>
+                                    {realtimeTime ? (
+                                      <Box>
+                                        <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'black' }}>
+                                          {realtimeTime}
+                                        </Typography>
+                                        <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: '0.65rem' }}>
+                                          {scheduledTime}
+                                        </Typography>
+                                      </Box>
+                                    ) : (
+                                      <Typography variant="body2">
+                                        {scheduledTime}
+                                      </Typography>
+                                    )}
                                   </Box>
-                                ) : (
-                                  <Typography variant="body2">
-                                    {scheduledTime}
-                                  </Typography>
-                                )}
+                                </Box>
                               </TableCell>
                             )
                           })}
@@ -347,6 +394,37 @@ export default function TimetablesTab({ routes, workerApi, stops, agencies }: Ti
                   </TableBody>
                 </Table>
               </TableContainer>
+
+              {/* Legend */}
+              <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+                <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 'bold', mb: 1 }}>
+                  Legend
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Box
+                      sx={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: '50%',
+                        bgcolor: 'success.main'
+                      }}
+                    />
+                    <Typography variant="caption">Vehicle at stop</Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Box
+                      sx={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: '50%',
+                        bgcolor: 'info.main'
+                      }}
+                    />
+                    <Typography variant="caption">Vehicle approaching</Typography>
+                  </Box>
+                </Box>
+              </Box>
             </Paper>
           )}
         </Box>
