@@ -264,23 +264,64 @@ export default function TimetablesTab({ routes, workerApi, stops, agencies, vehi
           {/* Direction selection (horizontal buttons, 50% width each) */}
           {selectedRoute && directions.length > 0 && (
             <Box sx={{ display: 'flex', gap: 2 }}>
-              {directions.map((dir) => (
-                <Button
-                  key={dir.directionId}
-                  variant={selectedDirection?.directionId === dir.directionId ? 'contained' : 'outlined'}
-                  onClick={() => setSelectedDirection(dir)}
-                  sx={{ flex: 1 }}
-                >
-                  <Box>
-                    <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                      {dir.headsign}
-                    </Typography>
-                    <Typography variant="caption" display="block">
-                      {dir.trips.length} trips
-                    </Typography>
-                  </Box>
-                </Button>
-              ))}
+              {directions.map((dir) => {
+                const bgColor = selectedRoute.route_color ? `#${selectedRoute.route_color}` : '#CCCCCC'
+                const textColor = selectedRoute.route_text_color ? `#${selectedRoute.route_text_color}` : '#000000'
+                const isSelected = selectedDirection?.directionId === dir.directionId
+
+                return (
+                  <Button
+                    key={dir.directionId}
+                    variant="outlined"
+                    onClick={() => setSelectedDirection(dir)}
+                    sx={{
+                      flex: 1,
+                      backgroundColor: 'white',
+                      borderColor: isSelected ? 'primary.main' : 'grey.300',
+                      borderWidth: isSelected ? 2 : 1,
+                      '&:hover': {
+                        backgroundColor: 'grey.50',
+                        borderColor: isSelected ? 'primary.main' : 'grey.400'
+                      },
+                      justifyContent: 'flex-start',
+                      textTransform: 'none',
+                      py: 1.5
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, width: '100%' }}>
+                      {/* Route badge */}
+                      <Box
+                        sx={{
+                          display: 'inline-flex',
+                          px: 1.5,
+                          py: 0.5,
+                          borderRadius: 1,
+                          backgroundColor: bgColor,
+                          color: textColor,
+                          fontWeight: 'bold',
+                          minWidth: '40px',
+                          justifyContent: 'center',
+                          flexShrink: 0
+                        }}
+                      >
+                        <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                          {selectedRoute.route_short_name || selectedRoute.route_long_name?.substring(0, 3)}
+                        </Typography>
+                      </Box>
+
+                      {/* Direction info */}
+                      <Box sx={{ textAlign: 'left', flex: 1 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'text.primary' }}>
+                          {dir.headsign}
+                        </Typography>
+                        <Typography variant="caption" display="block" sx={{ color: 'text.secondary' }}>
+                          {dir.trips.length} trips
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </Button>
+                )
+              })}
             </Box>
           )}
         </Box>
