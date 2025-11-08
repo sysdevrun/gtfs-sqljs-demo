@@ -26,7 +26,6 @@ import { timeToSeconds } from '../components/utils'
 interface TimetablesTabProps {
   routes: Route[]
   workerApi: Remote<GtfsWorkerAPI> | null
-  stops: Stop[]
   agencies: Agency[]
   vehicles: VehiclePosition[]
 }
@@ -34,6 +33,7 @@ interface TimetablesTabProps {
 interface TripWithTimes {
   trip: Trip
   stopTimes: StopTimeWithRealtime[]
+  stopTimesMap: Map<string, StopTimeWithRealtime> // Map of stop_id to StopTime for quick lookup
 }
 
 interface DirectionGroup {
@@ -42,12 +42,13 @@ interface DirectionGroup {
   trips: Trip[]
 }
 
-export default function TimetablesTab({ routes, workerApi, stops, agencies, vehicles }: TimetablesTabProps) {
+export default function TimetablesTab({ routes, workerApi, agencies, vehicles }: TimetablesTabProps) {
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0])
   const [selectedRoute, setSelectedRoute] = useState<Route | null>(null)
   const [directions, setDirections] = useState<DirectionGroup[]>([])
   const [selectedDirection, setSelectedDirection] = useState<DirectionGroup | null>(null)
   const [timetable, setTimetable] = useState<TripWithTimes[]>([])
+  const [orderedStops, setOrderedStops] = useState<Stop[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -89,6 +90,7 @@ export default function TimetablesTab({ routes, workerApi, stops, agencies, vehi
   useEffect(() => {
     if (!workerApi || !selectedDirection) {
       setTimetable([])
+      setOrderedStops([])
       setError(null)
       return
     }
@@ -100,9 +102,18 @@ export default function TimetablesTab({ routes, workerApi, stops, agencies, vehi
       try {
         const tripsWithTimes: TripWithTimes[] = []
 
+        // Get trip IDs for building ordered stop list
+        const tripIds = selectedDirection.trips.map(t => t.trip_id)
+
+        // Load stop times for each trip
         for (const trip of selectedDirection.trips) {
           const stopTimes = await workerApi.getStopTimes({ tripId: trip.trip_id, includeRealtime: true })
-          tripsWithTimes.push({ trip, stopTimes })
+
+          // Create a map for quick lookup
+          const stopTimesMap = new Map<string, StopTimeWithRealtime>()
+          stopTimes.forEach(st => stopTimesMap.set(st.stop_id, st))
+
+          tripsWithTimes.push({ trip, stopTimes, stopTimesMap })
         }
 
         // Sort trips by first departure time
@@ -112,27 +123,17 @@ export default function TimetablesTab({ routes, workerApi, stops, agencies, vehi
           return aTime.localeCompare(bTime)
         })
 
-        // Validate that all trips have the same stops
-        if (tripsWithTimes.length > 1) {
-          const firstStops = tripsWithTimes[0].stopTimes.map(st => st.stop_id).join(',')
-          const allSame = tripsWithTimes.every(tt =>
-            tt.stopTimes.map(st => st.stop_id).join(',') === firstStops
-          )
-
-          if (!allSame) {
-            setError('Some trips have different stops')
-            setTimetable([])
-            setLoading(false)
-            return
-          }
-        }
+        // Build ordered stop list from all trips
+        const orderedStopList = await workerApi.buildOrderedStopList(tripIds)
 
         setTimetable(tripsWithTimes)
+        setOrderedStops(orderedStopList)
         setLoading(false)
       } catch (err) {
         console.error('Error loading timetable:', err)
         setError('Failed to load timetable')
         setTimetable([])
+        setOrderedStops([])
         setLoading(false)
       }
     }
@@ -145,16 +146,6 @@ export default function TimetablesTab({ routes, workerApi, stops, agencies, vehi
     const [h, m] = timeStr.split(':')
     const hours = (parseInt(h, 10) % 24).toString().padStart(2, '0')  // Use modulo 24 for times >= 24h
     return `${hours}:${m}`
-  }
-
-  const getStopName = (stopId: string): string => {
-    const stop = stops.find(s => s.stop_id === stopId)
-    return stop?.stop_name || stopId
-  }
-
-  const getPlatform = (stopId: string): string | null => {
-    const stop = stops.find(s => s.stop_id === stopId)
-    return stop?.platform_code || null
   }
 
   const getRealtimeDepartureTime = (stopTime: StopTimeWithRealtime): string | null => {
@@ -369,10 +360,10 @@ export default function TimetablesTab({ routes, workerApi, stops, agencies, vehi
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {timetable[0]?.stopTimes.map((_, stopIdx) => {
-                      const stopId = timetable[0].stopTimes[stopIdx].stop_id
-                      const stopName = getStopName(stopId)
-                      const platform = getPlatform(stopId)
+                    {orderedStops.map((stop, stopIdx) => {
+                      const stopId = stop.stop_id
+                      const stopName = stop.stop_name
+                      const platform = stop.platform_code
 
                       return (
                         <TableRow key={stopIdx}>
@@ -387,7 +378,19 @@ export default function TimetablesTab({ routes, workerApi, stops, agencies, vehi
                             </Box>
                           </TableCell>
                           {timetable.map((tt, tripIdx) => {
-                            const stopTime = tt.stopTimes[stopIdx]
+                            const stopTime = tt.stopTimesMap.get(stopId)
+
+                            // If this trip doesn't stop here, show a dash
+                            if (!stopTime) {
+                              return (
+                                <TableCell key={tripIdx} align="center">
+                                  <Typography variant="body2" color="text.secondary">
+                                    —
+                                  </Typography>
+                                </TableCell>
+                              )
+                            }
+
                             const scheduledTime = formatTime(stopTime.departure_time)
                             const realtimeTime = isToday() ? getRealtimeDepartureTime(stopTime) : null
                             const vehicleStatus = getVehicleStatus(tt.trip.trip_id, stopTime.stop_id)
