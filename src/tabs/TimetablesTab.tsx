@@ -214,95 +214,97 @@ export default function TimetablesTab({ routes, workerApi, stops, agencies, vehi
 
   return (
     <Box sx={{ p: 3 }}>
-      {/* Top row: Route selection + Date selection */}
-      <Box sx={{ display: 'flex', gap: 3, mb: 3, flexDirection: { xs: 'column', md: 'row' } }}>
-        {/* Routes - takes most space */}
-        <Paper sx={{ flex: 1, p: 2, height: '300px', overflow: 'auto' }}>
-          <Typography variant="h6" gutterBottom>
-            Routes
-          </Typography>
-          <List>
-            {routes.map((route) => {
-              const bgColor = route.route_color ? `#${route.route_color}` : '#CCCCCC'
-              const textColor = route.route_text_color ? `#${route.route_text_color}` : '#000000'
-
-              return (
-                <ListItem key={route.route_id} disablePadding>
-                  <ListItemButton
-                    selected={selectedRoute?.route_id === route.route_id}
-                    onClick={() => setSelectedRoute(route)}
-                  >
-                    <Box
-                      sx={{
-                        display: 'inline-block',
-                        px: 1.5,
-                        py: 0.5,
-                        mr: 1.5,
-                        borderRadius: 1,
-                        backgroundColor: bgColor,
-                        color: textColor,
-                        fontWeight: 'bold',
-                        minWidth: '40px',
-                        textAlign: 'center'
-                      }}
-                    >
-                      {route.route_short_name || route.route_long_name?.substring(0, 3)}
-                    </Box>
-                    <ListItemText
-                      primary={route.route_long_name}
-                    />
-                  </ListItemButton>
-                </ListItem>
-              )
-            })}
-          </List>
-        </Paper>
-
-        {/* Date selection - compact */}
-        <Paper sx={{ p: 2, width: { xs: '100%', md: '220px' }, display: 'flex', flexDirection: 'column' }}>
-          <Typography variant="h6" gutterBottom>
-            Date
-          </Typography>
-          <TextField
-            type="date"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            fullWidth
-            InputLabelProps={{ shrink: true }}
-          />
-        </Paper>
-      </Box>
-
-      {/* Bottom row: Direction selection + Timetable */}
       <Box sx={{ display: 'flex', gap: 3, flexDirection: { xs: 'column', md: 'row' } }}>
-        {/* Direction selection - left side */}
-        {selectedRoute && (
-          <Paper sx={{ p: 2, width: { xs: '100%', md: '250px' }, alignSelf: 'flex-start' }}>
+        {/* Left side: part1 (Routes) + part2 (Date + Direction) */}
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, width: { xs: '100%', md: '300px' } }}>
+          {/* part1: Route selection */}
+          <Paper sx={{ p: 2, flex: 1, overflow: 'auto', minHeight: '300px' }}>
             <Typography variant="h6" gutterBottom>
-              Direction
-            </Typography>
-            <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
-              {selectedRoute.route_short_name || selectedRoute.route_long_name}
+              Routes
             </Typography>
             <List>
-              {directions.map((dir) => (
-                <ListItem key={dir.directionId} disablePadding>
-                  <ListItemButton
-                    selected={selectedDirection?.directionId === dir.directionId}
-                    onClick={() => setSelectedDirection(dir)}
-                  >
-                    <ListItemText
-                      primary={dir.headsign}
-                      secondary={`${dir.trips.length} trips`}
-                    />
-                  </ListItemButton>
-                </ListItem>
-              ))}
+              {routes.map((route) => {
+                const bgColor = route.route_color ? `#${route.route_color}` : '#CCCCCC'
+                const textColor = route.route_text_color ? `#${route.route_text_color}` : '#000000'
+
+                return (
+                  <ListItem key={route.route_id} disablePadding>
+                    <ListItemButton
+                      selected={selectedRoute?.route_id === route.route_id}
+                      onClick={() => setSelectedRoute(route)}
+                    >
+                      <Box
+                        sx={{
+                          display: 'inline-block',
+                          px: 1.5,
+                          py: 0.5,
+                          mr: 1.5,
+                          borderRadius: 1,
+                          backgroundColor: bgColor,
+                          color: textColor,
+                          fontWeight: 'bold',
+                          minWidth: '40px',
+                          textAlign: 'center'
+                        }}
+                      >
+                        {route.route_short_name || route.route_long_name?.substring(0, 3)}
+                      </Box>
+                      <ListItemText
+                        primary={route.route_long_name}
+                      />
+                    </ListItemButton>
+                  </ListItem>
+                )
+              })}
             </List>
           </Paper>
-        )}
 
-        {/* Timetable - takes remaining space */}
+          {/* part2: Date + Direction (horizontal) */}
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {/* part2-1: Date selection */}
+            <Paper sx={{ p: 2 }}>
+              <Typography variant="h6" gutterBottom>
+                Date
+              </Typography>
+              <TextField
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                fullWidth
+                InputLabelProps={{ shrink: true }}
+              />
+            </Paper>
+
+            {/* part2-2: Direction selection (if route selected) */}
+            {selectedRoute && (
+              <Paper sx={{ p: 2 }}>
+                <Typography variant="h6" gutterBottom>
+                  Direction
+                </Typography>
+                <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+                  {selectedRoute.route_short_name || selectedRoute.route_long_name}
+                </Typography>
+                <List>
+                  {directions.map((dir) => (
+                    <ListItem key={dir.directionId} disablePadding>
+                      <ListItemButton
+                        selected={selectedDirection?.directionId === dir.directionId}
+                        onClick={() => setSelectedDirection(dir)}
+                      >
+                        <ListItemText
+                          primary={dir.headsign}
+                          secondary={`${dir.trips.length} trips`}
+                        />
+                      </ListItemButton>
+                    </ListItem>
+                  ))}
+                </List>
+              </Paper>
+            )}
+          </Box>
+        </Box>
+
+        {/* Right side: Timetable - takes remaining space */}
         <Box sx={{ flex: 1 }}>
           {error && (
             <Alert severity="error" sx={{ mb: 3 }}>
