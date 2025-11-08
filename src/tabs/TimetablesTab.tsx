@@ -17,6 +17,7 @@ import {
   Alert,
   Button
 } from '@mui/material'
+import DirectionsBusIcon from '@mui/icons-material/DirectionsBus'
 import { Route, Trip, StopTimeWithRealtime, Stop, Agency, VehiclePosition } from 'gtfs-sqljs'
 import type { Remote } from 'comlink'
 import type { GtfsWorkerAPI } from '../gtfs.worker'
@@ -395,24 +396,31 @@ export default function TimetablesTab({ routes, workerApi, stops, agencies, vehi
                               <TableCell key={tripIdx} align="center">
                                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
                                   {vehicleStatus === 'at-stop' && (
-                                    <Box
+                                    <DirectionsBusIcon
                                       sx={{
-                                        width: 8,
-                                        height: 8,
-                                        borderRadius: '50%',
-                                        bgcolor: 'success.main',
+                                        fontSize: 16,
+                                        color: 'success.main',
                                         flexShrink: 0
                                       }}
                                     />
                                   )}
                                   {vehicleStatus === 'approaching' && (
-                                    <Box
+                                    <DirectionsBusIcon
                                       sx={{
-                                        width: 8,
-                                        height: 8,
-                                        borderRadius: '50%',
-                                        bgcolor: 'info.main',
-                                        flexShrink: 0
+                                        fontSize: 16,
+                                        color: 'warning.main',
+                                        flexShrink: 0,
+                                        '@keyframes pulse': {
+                                          '0%, 100%': {
+                                            opacity: 1,
+                                            transform: 'scale(1)'
+                                          },
+                                          '50%': {
+                                            opacity: 0.7,
+                                            transform: 'scale(0.95)'
+                                          }
+                                        },
+                                        animation: 'pulse 1.5s ease-in-out infinite'
                                       }}
                                     />
                                   )}
@@ -450,26 +458,22 @@ export default function TimetablesTab({ routes, workerApi, stops, agencies, vehi
                 </Typography>
                 <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Box
+                    <DirectionsBusIcon
                       sx={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: '50%',
-                        bgcolor: 'success.main'
+                        fontSize: 16,
+                        color: 'success.main'
                       }}
                     />
                     <Typography variant="caption">Vehicle at stop</Typography>
                   </Box>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Box
+                    <DirectionsBusIcon
                       sx={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: '50%',
-                        bgcolor: 'info.main'
+                        fontSize: 16,
+                        color: 'warning.main'
                       }}
                     />
-                    <Typography variant="caption">Vehicle approaching</Typography>
+                    <Typography variant="caption">Vehicle approaching (animated)</Typography>
                   </Box>
                 </Box>
               </Box>
