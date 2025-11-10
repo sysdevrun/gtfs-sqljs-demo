@@ -477,8 +477,8 @@ export default function DeparturesV2Tab({
                                   {formatDepartureTime(dep.departureTimeSeconds, dep.realtimeDepartureSeconds)}
                                 </Typography>
                                 {dep.realtimeDepartureSeconds && dep.realtimeDepartureSeconds !== dep.departureTimeSeconds && (
-                                  <Typography variant="caption" color="error">
-                                    (delay)
+                                  <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.75rem' }}>
+                                    {formatTime(dep.departureTimeSeconds)}
                                   </Typography>
                                 )}
                               </Box>
