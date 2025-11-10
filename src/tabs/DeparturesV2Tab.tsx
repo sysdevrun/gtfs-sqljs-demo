@@ -180,10 +180,20 @@ export default function DeparturesV2Tab({
           const [h, m, s] = stopTime.departure_time.split(':').map(Number)
           const departureTimeSeconds = h * 3600 + m * 60 + s
 
-          // Get realtime departure if available
+          // Get realtime departure if available (Unix timestamp -> seconds from midnight)
           let realtimeDepartureSeconds: number | null = null
           if (stopTime.realtime?.departure_time) {
-            realtimeDepartureSeconds = stopTime.realtime.departure_time
+            // Convert Unix timestamp to seconds-from-midnight in agency timezone
+            const realtimeDate = new Date(stopTime.realtime.departure_time * 1000)
+            const realtimeTimeString = realtimeDate.toLocaleString('en-US', {
+              timeZone: agencyTimezone,
+              hour12: false,
+              hour: '2-digit',
+              minute: '2-digit',
+              second: '2-digit'
+            })
+            const [rh, rm, rs] = realtimeTimeString.split(':').map(Number)
+            realtimeDepartureSeconds = rh * 3600 + rm * 60 + rs
           }
 
           const effectiveDepartureSeconds = realtimeDepartureSeconds ?? departureTimeSeconds
@@ -302,6 +312,7 @@ export default function DeparturesV2Tab({
         })
 
         setRouteDirectionGroups(groupsArray)
+        console.log(groupsArray)
         setLoading(false)
       } catch (err) {
         console.error('Error loading departures:', err)
@@ -501,6 +512,8 @@ export default function DeparturesV2Tab({
                                 >
                                   {formatDepartureTime(dep.departureTimeSeconds, dep.realtimeDepartureSeconds)}
                                 </Typography>
+                                {dep.trip.trip_short_name}
+
                                 {showTheoreticalSchedules && dep.realtimeDepartureSeconds !== null && (
                                   <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.75rem' }}>
                                     {formatTime(dep.departureTimeSeconds)}

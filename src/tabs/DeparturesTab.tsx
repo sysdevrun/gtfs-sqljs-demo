@@ -273,10 +273,20 @@ export default function DeparturesTab({
           const [h, m, s] = stopTime.departure_time.split(':').map(Number)
           const departureTimeSeconds = h * 3600 + m * 60 + s
 
-          // Get realtime departure if available (use absolute time)
+          // Get realtime departure if available (Unix timestamp -> seconds from midnight)
           let realtimeDepartureSeconds: number | null = null
           if (stopTime.realtime?.departure_time) {
-            realtimeDepartureSeconds = stopTime.realtime.departure_time
+            // Convert Unix timestamp to seconds-from-midnight in agency timezone
+            const realtimeDate = new Date(stopTime.realtime.departure_time * 1000)
+            const realtimeTimeString = realtimeDate.toLocaleString('en-US', {
+              timeZone: agencyTimezone,
+              hour12: false,
+              hour: '2-digit',
+              minute: '2-digit',
+              second: '2-digit'
+            })
+            const [rh, rm, rs] = realtimeTimeString.split(':').map(Number)
+            realtimeDepartureSeconds = rh * 3600 + rm * 60 + rs
           }
 
           const effectiveDepartureSeconds = realtimeDepartureSeconds ?? departureTimeSeconds
