@@ -272,9 +272,9 @@ export default function DeparturesV2Tab({
             )
 
             if (currentStopIndex !== -1) {
-              // Get upcoming stops (from current stop to end)
+              // Get upcoming stops (after current stop to end, excluding current)
               const upcomingStopIds = tripStopTimes
-                .slice(currentStopIndex)
+                .slice(currentStopIndex + 1)
                 .map(st => st.stop_id)
 
               // Get stop names
@@ -282,7 +282,7 @@ export default function DeparturesV2Tab({
               const stopNamesMap = new Map(upcomingStopsData.map(s => [s.stop_id, s.stop_name]))
 
               group.upcomingStops = tripStopTimes
-                .slice(currentStopIndex)
+                .slice(currentStopIndex + 1)
                 .map(st => stopNamesMap.get(st.stop_id) || st.stop_id)
             }
 
@@ -291,6 +291,13 @@ export default function DeparturesV2Tab({
             groupsArray.push(group)
           }
         }
+
+        // Sort groups by route_sort_order
+        groupsArray.sort((a, b) => {
+          const aSort = a.route?.route_sort_order ?? 9999
+          const bSort = b.route?.route_sort_order ?? 9999
+          return aSort - bSort
+        })
 
         setRouteDirectionGroups(groupsArray)
         setLoading(false)
@@ -398,16 +405,11 @@ export default function DeparturesV2Tab({
         <Box sx={{ flex: 1 }}>
           <Paper sx={{ p: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <Typography variant="h6">
-                  Next Departures (v2)
-                </Typography>
-                {loading && departures.length > 0 && (
-                  <Typography variant="caption" color="text.secondary">
-                    (Updating...)
-                  </Typography>
-                )}
-              </Box>
+              <Typography variant="h6">
+                {selectedCount > 0
+                  ? Array.from(new Set(stops.filter(s => selectedStopIds.has(s.stop_id)).map(s => s.stop_name))).join(', ')
+                  : 'Next Departures (v2)'}
+              </Typography>
               {agencyTime && (
                 <Typography variant="h6" sx={{ fontFamily: 'monospace', color: 'text.secondary' }}>
                   {agencyTime}
@@ -438,56 +440,55 @@ export default function DeparturesV2Tab({
                   return (
                     <Card key={idx} variant="outlined">
                       <CardContent>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                          <Box
-                            sx={{
-                              display: 'inline-block',
-                              px: 1,
-                              py: 0.5,
-                              borderRadius: 1,
-                              backgroundColor: bgColor,
-                              color: textColor,
-                              fontWeight: 'bold'
-                            }}
-                          >
-                            {group.route?.route_short_name || 'N/A'}
-                          </Box>
-                          <Typography variant="h6">
-                            {group.tripHeadsign}
-                          </Typography>
-                        </Box>
-
-                        <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
-                          {group.departures.map((dep, depIdx) => (
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <Box
-                              key={depIdx}
                               sx={{
-                                border: 1,
-                                borderColor: 'divider',
+                                display: 'inline-block',
+                                px: 1,
+                                py: 0.5,
                                 borderRadius: 1,
-                                p: 2,
-                                minWidth: '120px',
-                                textAlign: 'center'
+                                backgroundColor: bgColor,
+                                color: textColor,
+                                fontWeight: 'bold'
                               }}
                             >
-                              <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
-                                {formatDepartureTime(dep.departureTimeSeconds, dep.realtimeDepartureSeconds)}
-                              </Typography>
-                              {dep.realtimeDepartureSeconds && dep.realtimeDepartureSeconds !== dep.departureTimeSeconds && (
-                                <Typography variant="caption" color="error">
-                                  (delay)
-                                </Typography>
-                              )}
-                              <Typography variant="caption" display="block" color="text.secondary">
-                                {dep.stop.stop_name}
-                              </Typography>
+                              {group.route?.route_short_name || 'N/A'}
                             </Box>
-                          ))}
+                            <Typography variant="h6">
+                              {group.tripHeadsign}
+                            </Typography>
+                          </Box>
+
+                          <Box sx={{ display: 'flex', gap: 2 }}>
+                            {group.departures.map((dep, depIdx) => (
+                              <Box
+                                key={depIdx}
+                                sx={{
+                                  border: 1,
+                                  borderColor: 'divider',
+                                  borderRadius: 1,
+                                  p: 2,
+                                  minWidth: '120px',
+                                  textAlign: 'center'
+                                }}
+                              >
+                                <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
+                                  {formatDepartureTime(dep.departureTimeSeconds, dep.realtimeDepartureSeconds)}
+                                </Typography>
+                                {dep.realtimeDepartureSeconds && dep.realtimeDepartureSeconds !== dep.departureTimeSeconds && (
+                                  <Typography variant="caption" color="error">
+                                    (delay)
+                                  </Typography>
+                                )}
+                              </Box>
+                            ))}
+                          </Box>
                         </Box>
 
                         {group.upcomingStops.length > 0 && (
                           <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.8 }}>
-                            {group.upcomingStops.join(' · ')}
+                            Next stops: {group.upcomingStops.join(' · ')}
                           </Typography>
                         )}
                       </CardContent>
