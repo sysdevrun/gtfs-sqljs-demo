@@ -136,9 +136,9 @@ export default function ConfigurationTab({
           GTFS Configuration
         </Typography>
 
-        <Grid container spacing={2}>
+        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 2 }}>
           {/* Left side: Configuration form */}
-          <Grid item xs={12} md={6}>
+          <Box sx={{ flex: '1 1 50%' }}>
             <TextField
               fullWidth
               label="Static GTFS URL"
@@ -191,10 +191,10 @@ export default function ConfigurationTab({
                 {loading ? 'Loading...' : 'Reload GTFS'}
               </Button>
             </Stack>
-          </Grid>
+          </Box>
 
           {/* Right side: Currently loaded info */}
-          <Grid item xs={12} md={6}>
+          <Box sx={{ flex: '1 1 50%' }}>
             <Box sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 1, height: '100%' }}>
               <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 2 }}>
                 Currently Loaded
@@ -243,8 +243,8 @@ export default function ConfigurationTab({
                 </Typography>
               )}
             </Box>
-          </Grid>
-        </Grid>
+          </Box>
+        </Box>
       </Paper>
 
       <Paper sx={{ p: 3, mb: 3 }}>
@@ -380,35 +380,86 @@ export default function ConfigurationTab({
             </Grid>
           </Box>
 
-          {/* Real-time Data Status */}
-          {(vehicles.length > 0 || alerts.length > 0 || realtimeLastUpdated > 0) && (
+          {/* GTFS-RT Last Updates */}
+          {(vehicles.length > 0 || alerts.length > 0 || tripUpdates.length > 0) && (
             <>
               <Divider sx={{ my: 3 }} />
               <Box>
                 <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 2 }}>
-                  Real-time Data Status
+                  GTFS-RT Last Updates
                 </Typography>
                 <Grid container spacing={2}>
-                  {vehicles.length > 0 && vehicles[0].timestamp && (
-                    <Grid item xs={12} sm={6}>
-                      <Box sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
-                        <Typography variant="caption" color="text.secondary">Latest Vehicle Update</Typography>
-                        <Typography variant="body2" sx={{ fontFamily: 'monospace', mt: 0.5 }}>
-                          {Math.floor((Date.now() - vehicles[0].timestamp * 1000) / 1000)}s ago
-                        </Typography>
-                      </Box>
-                    </Grid>
-                  )}
-                  {realtimeLastUpdated > 0 && (
-                    <Grid item xs={12} sm={6}>
-                      <Box sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
-                        <Typography variant="caption" color="text.secondary">Last Realtime Fetch</Typography>
-                        <Typography variant="body2" sx={{ fontFamily: 'monospace', mt: 0.5 }}>
-                          {Math.floor((Date.now() - realtimeLastUpdated) / 1000)}s ago
-                        </Typography>
-                      </Box>
-                    </Grid>
-                  )}
+                  {/* Latest Vehicle Update */}
+                  {vehicles.length > 0 && (() => {
+                    const latestVehicle = vehicles.reduce((latest, v) =>
+                      (v.timestamp && (!latest.timestamp || v.timestamp > latest.timestamp)) ? v : latest
+                    , vehicles[0])
+                    if (!latestVehicle.timestamp) return null
+                    const timestampMs = latestVehicle.timestamp * 1000
+                    const secondsAgo = Math.floor((Date.now() - timestampMs) / 1000)
+                    return (
+                      <Grid item xs={12} sm={6} md={4}>
+                        <Box sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+                          <Typography variant="caption" color="text.secondary">Latest Vehicle Position</Typography>
+                          <Typography variant="body2" sx={{ fontFamily: 'monospace', mt: 0.5 }}>
+                            {formatDateTime(new Date(timestampMs))}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                            {secondsAgo}s ago
+                          </Typography>
+                        </Box>
+                      </Grid>
+                    )
+                  })()}
+
+                  {/* Latest Alert Update */}
+                  {alerts.length > 0 && (() => {
+                    const latestAlert = alerts.reduce((latest, a) => {
+                      const aTime = a.active_period?.[0]?.start || 0
+                      const latestTime = latest.active_period?.[0]?.start || 0
+                      return aTime > latestTime ? a : latest
+                    }, alerts[0])
+                    const timestamp = latestAlert.active_period?.[0]?.start
+                    if (!timestamp) return null
+                    const timestampMs = timestamp * 1000
+                    const secondsAgo = Math.floor((Date.now() - timestampMs) / 1000)
+                    return (
+                      <Grid item xs={12} sm={6} md={4}>
+                        <Box sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+                          <Typography variant="caption" color="text.secondary">Latest Alert</Typography>
+                          <Typography variant="body2" sx={{ fontFamily: 'monospace', mt: 0.5 }}>
+                            {formatDateTime(new Date(timestampMs))}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                            {secondsAgo}s ago
+                          </Typography>
+                        </Box>
+                      </Grid>
+                    )
+                  })()}
+
+                  {/* Latest Trip Update */}
+                  {tripUpdates.length > 0 && (() => {
+                    const latestTripUpdate = tripUpdates.reduce((latest, t) =>
+                      (t.timestamp && (!latest.timestamp || t.timestamp > latest.timestamp)) ? t : latest
+                    , tripUpdates[0])
+                    if (!latestTripUpdate.timestamp) return null
+                    const timestampMs = latestTripUpdate.timestamp * 1000
+                    const secondsAgo = Math.floor((Date.now() - timestampMs) / 1000)
+                    return (
+                      <Grid item xs={12} sm={6} md={4}>
+                        <Box sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+                          <Typography variant="caption" color="text.secondary">Latest Trip Update</Typography>
+                          <Typography variant="body2" sx={{ fontFamily: 'monospace', mt: 0.5 }}>
+                            {formatDateTime(new Date(timestampMs))}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                            {secondsAgo}s ago
+                          </Typography>
+                        </Box>
+                      </Grid>
+                    )
+                  })()}
                 </Grid>
               </Box>
             </>
