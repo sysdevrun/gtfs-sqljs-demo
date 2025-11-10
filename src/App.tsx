@@ -27,6 +27,7 @@ import {
   StopTimeWithRealtime,
   Alert,
   VehiclePosition,
+  TripUpdate,
   Stop
 } from 'gtfs-sqljs'
 import LoadingProgress from './components/LoadingProgress'
@@ -43,8 +44,22 @@ import DeparturesTab from './tabs/DeparturesTab'
 const PROXY_BASE = 'https://gtfs-proxy.sys-dev-run.re/proxy/'
 
 const proxyUrl = (url: string) => {
-  const parsed = new URL(url)
-  return PROXY_BASE + parsed.host + parsed.pathname + parsed.search
+  // Don't proxy relative or absolute paths (local files)
+  if (url.startsWith('./') || url.startsWith('/') || url.startsWith('../')) {
+    return url
+  }
+
+  // Only proxy remote HTTP/HTTPS URLs
+  try {
+    const parsed = new URL(url)
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      return PROXY_BASE + parsed.host + parsed.pathname + parsed.search
+    }
+    return url
+  } catch {
+    // If URL parsing fails, assume it's a relative path
+    return url
+  }
 }
 
 interface PresetConfig {
@@ -136,6 +151,7 @@ function App() {
   const [stopTimes, setStopTimes] = useState<StopTimeWithRealtime[]>([])
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [vehicles, setVehicles] = useState<VehiclePosition[]>([])
+  const [tripUpdates, setTripUpdates] = useState<TripUpdate[]>([])
 
   // Helper function to initialize or reinitialize worker
   const initializeWorker = useCallback(() => {
@@ -190,6 +206,7 @@ function App() {
     setStopTimes([])
     setAlerts([])
     setVehicles([])
+    setTripUpdates([])
     setSelectedRoute(null)
     setSelectedTrip(null)
 
@@ -206,7 +223,9 @@ function App() {
 
     try {
       const proxiedGtfsUrl = proxyUrl(config.gtfsUrl)
-      const proxiedRtUrls = config.gtfsRtUrls.map(url => proxyUrl(url))
+      const proxiedRtUrls = config.gtfsRtUrls
+        .filter(url => url.trim() !== '')
+        .map(url => proxyUrl(url))
 
       // Load GTFS with progress callback
       await workerRef.current.loadGtfs(
@@ -289,6 +308,7 @@ function App() {
         return aVehicleId.localeCompare(bVehicleId)
       })
       setVehicles(sortedVehicles)
+      setTripUpdates(tripUpdatesData)
 
       // Update timestamp to trigger stop times refresh
       setRealtimeLastUpdated(Date.now())
@@ -491,6 +511,7 @@ function App() {
                 vehicles={vehicles}
                 alerts={alerts}
                 realtimeLastUpdated={realtimeLastUpdated}
+                tripUpdates={tripUpdates}
               />
             )}
           </Container>
