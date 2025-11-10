@@ -566,9 +566,9 @@ export default function DeparturesTab({
                             <strong>
                               {formatDepartureTime(dep.departureTimeSeconds, dep.realtimeDepartureSeconds)}
                             </strong>
-                            {dep.realtimeDepartureSeconds && dep.realtimeDepartureSeconds !== dep.departureTimeSeconds && (
+                            {dep.realtimeDepartureSeconds !== null && dep.realtimeDepartureSeconds !== dep.departureTimeSeconds && (
                               <Typography variant="caption" color="error" display="block">
-                                (delay)
+                                ({Math.round((dep.realtimeDepartureSeconds - dep.departureTimeSeconds) / 60)} min. delay)
                               </Typography>
                             )}
                           </TableCell>
