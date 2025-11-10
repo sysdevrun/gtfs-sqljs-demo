@@ -534,6 +534,7 @@ export default function DeparturesTab({
                       <TableCell>Platform</TableCell>
                       <TableCell>Scheduled</TableCell>
                       <TableCell>Real-time</TableCell>
+                      <TableCell>Delay</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -566,10 +567,14 @@ export default function DeparturesTab({
                             <strong>
                               {formatDepartureTime(dep.departureTimeSeconds, dep.realtimeDepartureSeconds)}
                             </strong>
-                            {dep.realtimeDepartureSeconds !== null && dep.realtimeDepartureSeconds !== dep.departureTimeSeconds && (
-                              <Typography variant="caption" color="error" display="block">
-                                ({Math.round((dep.realtimeDepartureSeconds - dep.departureTimeSeconds) / 60)} min. delay)
+                          </TableCell>
+                          <TableCell>
+                            {dep.realtimeDepartureSeconds !== null && dep.realtimeDepartureSeconds !== dep.departureTimeSeconds ? (
+                              <Typography variant="body2" color="error">
+                                {Math.round((dep.realtimeDepartureSeconds - dep.departureTimeSeconds) / 60)} min. delay
                               </Typography>
+                            ) : (
+                              '-'
                             )}
                           </TableCell>
                         </TableRow>
