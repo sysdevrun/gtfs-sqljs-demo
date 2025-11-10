@@ -496,12 +496,12 @@ export default function DeparturesV2Tab({
                                   variant="h4"
                                   sx={{
                                     fontWeight: 'bold',
-                                    color: dep.realtimeDepartureSeconds ? '#1b5e20' : 'inherit'
+                                    color: dep.realtimeDepartureSeconds !== null ? '#1b5e20' : 'inherit'
                                   }}
                                 >
                                   {formatDepartureTime(dep.departureTimeSeconds, dep.realtimeDepartureSeconds)}
                                 </Typography>
-                                {showTheoreticalSchedules && dep.realtimeDepartureSeconds && dep.realtimeDepartureSeconds !== dep.departureTimeSeconds && (
+                                {showTheoreticalSchedules && dep.realtimeDepartureSeconds !== null && (
                                   <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.75rem' }}>
                                     {formatTime(dep.departureTimeSeconds)}
                                   </Typography>
