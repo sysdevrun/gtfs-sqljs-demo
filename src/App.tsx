@@ -40,6 +40,7 @@ import TimetablesTab from './tabs/TimetablesTab'
 import MapTab from './tabs/MapTab'
 import AlertsTab from './tabs/AlertsTab'
 import DeparturesTab from './tabs/DeparturesTab'
+import DeparturesV2Tab from './tabs/DeparturesV2Tab'
 
 const PROXY_BASE = 'https://gtfs-proxy.sys-dev-run.re/proxy/'
 
@@ -437,6 +438,7 @@ function App() {
               <Tab icon={<MapIcon />} label="Map" disabled={!gtfsLoaded} />
               <Tab icon={<WarningIcon />} label="Alerts" disabled={!gtfsLoaded} />
               <Tab icon={<BusIcon />} label="Departures at Stop" disabled={!gtfsLoaded} />
+              <Tab icon={<BusIcon />} label="Departures v2" disabled={!gtfsLoaded} />
               <Tab icon={<SettingsIcon />} label="Configuration" />
             </Tabs>
           </Container>
@@ -496,7 +498,19 @@ function App() {
               />
             )}
 
-            {currentTab === 5 && (
+            {currentTab === 5 && gtfsLoaded && (
+              <DeparturesV2Tab
+                stops={stops}
+                routes={routes}
+                workerApi={workerRef.current}
+                gtfsApi={gtfsApiRef.current}
+                upcomingDeparturesCount={config.upcomingDeparturesCount}
+                updateInterval={config.updateInterval}
+                agencies={agencies}
+              />
+            )}
+
+            {currentTab === 6 && (
               <ConfigurationTab
                 config={config}
                 setConfig={setConfig}
