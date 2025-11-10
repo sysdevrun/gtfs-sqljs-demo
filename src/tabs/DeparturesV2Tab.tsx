@@ -11,7 +11,8 @@ import {
   TextField,
   Stack,
   Card,
-  CardContent
+  CardContent,
+  FormControlLabel
 } from '@mui/material'
 import { Stop, Route, Trip, StopTimeWithRealtime, Agency } from 'gtfs-sqljs'
 import type { Remote } from 'comlink'
@@ -60,6 +61,7 @@ export default function DeparturesV2Tab({
   const [searchQuery, setSearchQuery] = useState('')
   const [agencyTime, setAgencyTime] = useState<string>('')
   const [routeDirectionGroups, setRouteDirectionGroups] = useState<RouteDirectionGroup[]>([])
+  const [showTheoreticalSchedules, setShowTheoreticalSchedules] = useState(false)
 
   // Toggle individual stop selection
   const toggleStop = (stopId: string) => {
@@ -361,6 +363,21 @@ export default function DeparturesV2Tab({
     <Box sx={{ p: 3 }}>
       <Box sx={{ display: 'flex', gap: 3, flexDirection: { xs: 'column', md: 'row' } }}>
         <Box sx={{ flex: { xs: '1', md: '0 0 33%' } }}>
+          <Paper sx={{ p: 2, mb: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              Configuration
+            </Typography>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={showTheoreticalSchedules}
+                  onChange={(e) => setShowTheoreticalSchedules(e.target.checked)}
+                />
+              }
+              label="Show theoretical schedules"
+            />
+          </Paper>
+
           <Paper sx={{ p: 2, height: '600px', display: 'flex', flexDirection: 'column' }}>
             <Typography variant="h6" gutterBottom>
               Select Stops ({selectedCount} selected)
@@ -412,7 +429,9 @@ export default function DeparturesV2Tab({
               </Typography>
               {agencyTime && (
                 <Typography variant="h6" sx={{ fontFamily: 'monospace', color: 'text.secondary' }}>
-                  {agencyTime}
+                  {agencyTime.split(':')[0]}
+                  <span style={{ color: loading ? '#000' : 'inherit' }}>:</span>
+                  {agencyTime.split(':')[1]}
                 </Typography>
               )}
             </Box>
@@ -473,10 +492,16 @@ export default function DeparturesV2Tab({
                                   textAlign: 'center'
                                 }}
                               >
-                                <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
+                                <Typography
+                                  variant="h4"
+                                  sx={{
+                                    fontWeight: 'bold',
+                                    color: dep.realtimeDepartureSeconds ? '#1b5e20' : 'inherit'
+                                  }}
+                                >
                                   {formatDepartureTime(dep.departureTimeSeconds, dep.realtimeDepartureSeconds)}
                                 </Typography>
-                                {dep.realtimeDepartureSeconds && dep.realtimeDepartureSeconds !== dep.departureTimeSeconds && (
+                                {showTheoreticalSchedules && dep.realtimeDepartureSeconds && dep.realtimeDepartureSeconds !== dep.departureTimeSeconds && (
                                   <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.75rem' }}>
                                     {formatTime(dep.departureTimeSeconds)}
                                   </Typography>
