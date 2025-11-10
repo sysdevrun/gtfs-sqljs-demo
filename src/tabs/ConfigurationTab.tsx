@@ -22,7 +22,6 @@ interface ConfigurationTabProps {
   routesCount: number
   vehicles: VehiclePosition[]
   alerts: Alert[]
-  realtimeLastUpdated: number
   tripUpdates: TripUpdate[]
 }
 
@@ -39,7 +38,6 @@ export default function ConfigurationTab({
   routesCount,
   vehicles,
   alerts,
-  realtimeLastUpdated,
   tripUpdates
 }: ConfigurationTabProps) {
   const [currentTime, setCurrentTime] = useState(new Date())
@@ -281,25 +279,25 @@ export default function ConfigurationTab({
               Dataset Overview
             </Typography>
             <Grid container spacing={2}>
-              <Grid item xs={6} sm={3}>
+              <Grid size={{ xs: 6, sm: 3 }}>
                 <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
                   <Typography variant="h4" color="error.main">{agencies.length}</Typography>
                   <Typography variant="caption" color="text.secondary">Agencies</Typography>
                 </Paper>
               </Grid>
-              <Grid item xs={6} sm={3}>
+              <Grid size={{ xs: 6, sm: 3 }}>
                 <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
                   <Typography variant="h4" color="error.main">{routesCount}</Typography>
                   <Typography variant="caption" color="text.secondary">Routes</Typography>
                 </Paper>
               </Grid>
-              <Grid item xs={6} sm={3}>
+              <Grid size={{ xs: 6, sm: 3 }}>
                 <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
                   <Typography variant="h4" color="error.main">{vehicles.length}</Typography>
                   <Typography variant="caption" color="text.secondary">Vehicle Positions</Typography>
                 </Paper>
               </Grid>
-              <Grid item xs={6} sm={3}>
+              <Grid size={{ xs: 6, sm: 3 }}>
                 <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
                   <Typography variant="h4" color="error.main">{alerts.length}</Typography>
                   <Typography variant="caption" color="text.secondary">Active Alerts</Typography>
@@ -342,7 +340,7 @@ export default function ConfigurationTab({
               Time Information
             </Typography>
             <Grid container spacing={2}>
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <Box sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
                   <Typography variant="caption" color="text.secondary">Browser Time</Typography>
                   <Typography variant="body2" sx={{ fontFamily: 'monospace', mt: 0.5 }}>
@@ -354,7 +352,7 @@ export default function ConfigurationTab({
                 </Box>
               </Grid>
               {agencies.length > 0 && agencies[0].agency_timezone && (
-                <Grid item xs={12} sm={6}>
+                <Grid size={{ xs: 12, sm: 6 }}>
                   <Box sx={{ p: 2, bgcolor: 'error.50', borderRadius: 1 }}>
                     <Typography variant="caption" color="text.secondary">Agency Time</Typography>
                     <Typography variant="body2" sx={{ fontFamily: 'monospace', mt: 0.5 }}>
@@ -366,7 +364,7 @@ export default function ConfigurationTab({
                   </Box>
                 </Grid>
               )}
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <Box sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
                   <Typography variant="caption" color="text.secondary">UTC Time</Typography>
                   <Typography variant="body2" sx={{ fontFamily: 'monospace', mt: 0.5 }}>
@@ -398,7 +396,7 @@ export default function ConfigurationTab({
                     const timestampMs = latestVehicle.timestamp * 1000
                     const secondsAgo = Math.floor((Date.now() - timestampMs) / 1000)
                     return (
-                      <Grid item xs={12} sm={6} md={4}>
+                      <Grid size={{ xs: 12, sm: 6, md: 4 }}>
                         <Box sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
                           <Typography variant="caption" color="text.secondary">Latest Vehicle Position</Typography>
                           <Typography variant="body2" sx={{ fontFamily: 'monospace', mt: 0.5 }}>
@@ -424,7 +422,7 @@ export default function ConfigurationTab({
                     const timestampMs = timestamp * 1000
                     const secondsAgo = Math.floor((Date.now() - timestampMs) / 1000)
                     return (
-                      <Grid item xs={12} sm={6} md={4}>
+                      <Grid size={{ xs: 12, sm: 6, md: 4 }}>
                         <Box sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
                           <Typography variant="caption" color="text.secondary">Latest Alert</Typography>
                           <Typography variant="body2" sx={{ fontFamily: 'monospace', mt: 0.5 }}>
@@ -447,7 +445,7 @@ export default function ConfigurationTab({
                     const timestampMs = latestTripUpdate.timestamp * 1000
                     const secondsAgo = Math.floor((Date.now() - timestampMs) / 1000)
                     return (
-                      <Grid item xs={12} sm={6} md={4}>
+                      <Grid size={{ xs: 12, sm: 6, md: 4 }}>
                         <Box sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
                           <Typography variant="caption" color="text.secondary">Latest Trip Update</Typography>
                           <Typography variant="body2" sx={{ fontFamily: 'monospace', mt: 0.5 }}>
@@ -476,7 +474,7 @@ export default function ConfigurationTab({
           <Grid container spacing={2}>
             {/* Vehicles */}
             {vehicles.length > 0 && (
-              <Grid item xs={12} md={4}>
+              <Grid size={{ xs: 12, md: 4 }}>
                 <Paper variant="outlined" sx={{ p: 2 }}>
                   <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>
                     Vehicle Positions ({vehicles.length})
@@ -484,7 +482,7 @@ export default function ConfigurationTab({
                   {vehicles.slice(0, 3).map((vehicle, index) => (
                     <Box key={index} sx={{ mb: 1.5, p: 1, bgcolor: 'grey.50', borderRadius: 1 }}>
                       <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
-                        {vehicle.vehicle_label || vehicle.vehicle_id || 'Unknown'}
+                        {vehicle.vehicle?.label || vehicle.vehicle?.id || 'Unknown'}
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
                         Trip: {vehicle.trip_id || 'N/A'}
@@ -507,23 +505,30 @@ export default function ConfigurationTab({
 
             {/* Alerts */}
             {alerts.length > 0 && (
-              <Grid item xs={12} md={4}>
+              <Grid size={{ xs: 12, md: 4 }}>
                 <Paper variant="outlined" sx={{ p: 2 }}>
                   <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>
                     Active Alerts ({alerts.length})
                   </Typography>
-                  {alerts.slice(0, 3).map((alert, index) => (
-                    <Box key={index} sx={{ mb: 1.5, p: 1, bgcolor: 'error.50', borderRadius: 1 }}>
-                      <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
-                        {alert.header_text || 'Alert'}
-                      </Typography>
-                      {alert.description_text && (
-                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-                          {alert.description_text.substring(0, 50)}{alert.description_text.length > 50 ? '...' : ''}
+                  {alerts.slice(0, 3).map((alert, index) => {
+                    const descText = typeof alert.description_text === 'string'
+                      ? alert.description_text
+                      : alert.description_text?.translation?.[0]?.text || ''
+                    return (
+                      <Box key={index} sx={{ mb: 1.5, p: 1, bgcolor: 'error.50', borderRadius: 1 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
+                          {typeof alert.header_text === 'string'
+                            ? alert.header_text
+                            : alert.header_text?.translation?.[0]?.text || 'Alert'}
                         </Typography>
-                      )}
-                    </Box>
-                  ))}
+                        {descText && (
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                            {descText.substring(0, 50)}{descText.length > 50 ? '...' : ''}
+                          </Typography>
+                        )}
+                      </Box>
+                    )
+                  })}
                   {alerts.length > 3 && (
                     <Typography variant="caption" color="text.secondary">
                       + {alerts.length - 3} more
@@ -535,7 +540,7 @@ export default function ConfigurationTab({
 
             {/* Trip Updates */}
             {tripUpdates.length > 0 && (
-              <Grid item xs={12} md={4}>
+              <Grid size={{ xs: 12, md: 4 }}>
                 <Paper variant="outlined" sx={{ p: 2 }}>
                   <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>
                     Trip Updates ({tripUpdates.length})
@@ -545,9 +550,9 @@ export default function ConfigurationTab({
                       <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
                         Trip: {update.trip_id || 'Unknown'}
                       </Typography>
-                      {update.vehicle_id && (
+                      {update.vehicle?.id && (
                         <Typography variant="caption" color="text.secondary">
-                          Vehicle: {update.vehicle_id}
+                          Vehicle: {update.vehicle.id}
                         </Typography>
                       )}
                       {update.timestamp && (

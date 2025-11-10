@@ -510,7 +510,6 @@ function App() {
                 routesCount={routes.length}
                 vehicles={vehicles}
                 alerts={alerts}
-                realtimeLastUpdated={realtimeLastUpdated}
                 tripUpdates={tripUpdates}
               />
             )}
