@@ -107,6 +107,28 @@ const PRESETS: PresetConfig[] = [
     name: 'Citalis',
     gtfsUrl: 'https://pysae.com/api/v2/groups/citalis/gtfs/pub',
     gtfsRtUrls: ['https://pysae.com/api/v2/groups/citalis/gtfs-rt']
+  },
+  {
+    name: 'STAS',
+    gtfsUrl: 'https://api-preprod.saint-etienne-metropole.fr/gtfs-tools/api/gtfs',
+    gtfsRtUrls: ['https://api-preprod.saint-etienne-metropole.fr/gtfs-tools/api/TripUpdate?format=pb']
+  },
+  {
+    name: 'Astuce',
+    gtfsUrl: 'https://api.mrn.cityway.fr/dataflow/offre-tc/download?provider=ASTUCE&dataFormat=gtfs&dataProfil=ASTUCE',
+    gtfsRtUrls: [
+      'https://api.mrn.cityway.fr/dataflow/vehicle-tc-tr/download?provider=TCAR&dataFormat=gtfs-rt',
+      'https://api.mrn.cityway.fr/dataflow/info-transport/download?provider=ASTUCE&dataFormat=gtfs-rt',
+      'https://api.mrn.cityway.fr/dataflow/vehicule-tc-tr/download?provider=TNI&dataFormat=gtfs-rt',
+      'https://api.mrn.cityway.fr/dataflow/horaire-tc-tr/download?provider=TNI&dataFormat=gtfs-rt',
+      'https://api.mrn.cityway.fr/dataflow/horaire-tc-tr/download?provider=TAE&dataFormat=gtfs-rt',
+      'https://api.mrn.cityway.fr/dataflow/horaire-tc-tr/download?provider=TCAR&dataFormat=gtfs-rt'
+    ]
+  },
+  {
+    name: 'MAP',
+    gtfsUrl: 'https://www.data.gouv.fr/api/1/datasets/r/3bd31fbe-93f4-432d-ade7-ee8d69897880',
+    gtfsRtUrls: ['https://proxy.transport.data.gouv.fr/resource/mat-saint-malo-gtfs-rt-trip-update']
   }
 ]
 
