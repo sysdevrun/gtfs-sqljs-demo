@@ -85,7 +85,7 @@ class GtfsWorker implements GtfsWorkerAPI {
       this.gtfs = await GtfsSqlJs.fromZip(gtfsUrl, {
         realtimeFeedUrls: gtfsRtUrls,
         stalenessThreshold: 120,
-        skipFiles: ['shapes.txt'],
+        skipFiles: ['shapes.txt', 'fare_attributes.txt'],
         locateFile: (filename: string) => {
           if (filename.endsWith('.wasm')) {
             // WASM files are at the base path, not relative to worker location
