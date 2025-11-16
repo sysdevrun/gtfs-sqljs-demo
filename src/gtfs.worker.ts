@@ -20,12 +20,14 @@ import {
 } from 'gtfs-sqljs'
 
 export interface ProgressInfo {
-  phase: 'downloading' | 'extracting' | 'creating_schema' | 'inserting_data' | 'creating_indexes' | 'analyzing' | 'complete'
+  phase: 'checking_cache' | 'loading_from_cache' | 'downloading' | 'extracting' | 'creating_schema' | 'inserting_data' | 'creating_indexes' | 'analyzing' | 'loading_realtime' | 'saving_cache' | 'complete'
   currentFile: string | null
   filesCompleted: number
   totalFiles: number
   rowsProcessed: number
   totalRows: number
+  bytesDownloaded?: number
+  totalBytes?: number
   percentComplete: number
   message: string
 }

@@ -17,7 +17,7 @@
     "@types/leaflet": "^1.9.21",
     "comlink": "^4.4.2",
     "geolib": "^3.3.4",
-    "gtfs-sqljs": "github:sysdevrun/gtfs-sqljs#8eef2d3358a8b35c5593d9bc83d36b72e43a28bf",
+    "gtfs-sqljs": "github:sysdevrun/gtfs-sqljs#7cfd31560795daa6e77c04561363d601feba8c94",
     "leaflet": "^1.9.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

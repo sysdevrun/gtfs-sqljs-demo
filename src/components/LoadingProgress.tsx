@@ -9,12 +9,16 @@ const LoadingProgress = ({ progress }: LoadingProgressProps) => {
 
   const getPhaseLabel = (phase: string): string => {
     const labels: Record<string, string> = {
+      checking_cache: 'Checking Cache',
+      loading_from_cache: 'Loading from Cache',
       downloading: 'Downloading GTFS Data',
       extracting: 'Extracting Archive',
       creating_schema: 'Creating Database Schema',
       inserting_data: 'Importing Data',
       creating_indexes: 'Creating Indexes',
       analyzing: 'Optimizing Database',
+      loading_realtime: 'Loading Realtime Data',
+      saving_cache: 'Saving to Cache',
       complete: 'Complete'
     }
     return labels[phase] || phase
@@ -22,12 +26,16 @@ const LoadingProgress = ({ progress }: LoadingProgressProps) => {
 
   const getPhaseColor = (phase: string): string => {
     const colors: Record<string, string> = {
+      checking_cache: 'bg-gray-500',
+      loading_from_cache: 'bg-cyan-500',
       downloading: 'bg-blue-500',
       extracting: 'bg-indigo-500',
       creating_schema: 'bg-purple-500',
       inserting_data: 'bg-pink-500',
       creating_indexes: 'bg-red-500',
       analyzing: 'bg-orange-500',
+      loading_realtime: 'bg-yellow-500',
+      saving_cache: 'bg-teal-500',
       complete: 'bg-green-500'
     }
     return colors[phase] || 'bg-gray-500'
@@ -81,7 +89,16 @@ const LoadingProgress = ({ progress }: LoadingProgressProps) => {
             </div>
           )}
 
-          {progress.totalRows > 0 && (
+          {progress.phase === 'downloading' && progress.totalBytes && progress.totalBytes > 0 && (
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-gray-600">Downloaded:</span>
+              <span className="font-medium text-gray-900">
+                {((progress.bytesDownloaded || 0) / 1024 / 1024).toFixed(1)} MB / {(progress.totalBytes / 1024 / 1024).toFixed(1)} MB
+              </span>
+            </div>
+          )}
+
+          {progress.phase !== 'downloading' && progress.totalRows > 0 && (
             <div className="flex justify-between items-center text-sm">
               <span className="text-gray-600">Rows Imported:</span>
               <span className="font-medium text-gray-900">
