@@ -215,7 +215,7 @@ function App() {
   }
 
   // Load GTFS data
-  const loadGtfs = useCallback(async () => {
+  const loadGtfs = useCallback(async (gtfsUrl?: string, gtfsRtUrls?: string[]) => {
     setLoading(true)
     setLoadingProgress(null)
     setError(null)
@@ -245,10 +245,17 @@ function App() {
     }
 
     try {
-      const proxiedGtfsUrl = proxyUrl(config.gtfsUrl)
-      const proxiedRtUrls = config.gtfsRtUrls
+      // Use provided URLs or fall back to config
+      const urlToLoad = gtfsUrl ?? config.gtfsUrl
+      const rtUrlsToLoad = gtfsRtUrls ?? config.gtfsRtUrls
+
+      const proxiedGtfsUrl = proxyUrl(urlToLoad)
+      const proxiedRtUrls = rtUrlsToLoad
         .filter(url => url.trim() !== '')
         .map(url => proxyUrl(url))
+
+      console.log('Loading GTFS from:', proxiedGtfsUrl)
+      console.log('Loading GTFS-RT from:', proxiedRtUrls)
 
       // Load GTFS with progress callback
       await workerRef.current.loadGtfs(
@@ -261,9 +268,11 @@ function App() {
 
       // Fetch data from worker
       const agenciesData = await workerRef.current.getAgencies()
+      console.log('Loaded agencies:', agenciesData.map(a => a.agency_name).join(', '))
       setAgencies(agenciesData)
 
       const routesData = await workerRef.current.getRoutes()
+      console.log(`Loaded ${routesData.length} routes`)
       const sortedRoutes = routesData.sort((a: Route, b: Route) => {
         const aSort = a.route_sort_order ?? 9999
         const bSort = b.route_sort_order ?? 9999
@@ -273,6 +282,7 @@ function App() {
 
       // Fetch stops and update API adapter cache
       const stopsData = await workerRef.current.getStops()
+      console.log(`Loaded ${stopsData.length} stops`)
       setStops(stopsData)
       if (gtfsApiRef.current) {
         gtfsApiRef.current.setStops(stopsData)
