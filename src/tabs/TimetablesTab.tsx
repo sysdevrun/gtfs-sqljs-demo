@@ -17,11 +17,11 @@ import {
   Alert,
   Button
 } from '@mui/material'
-import DirectionsBusIcon from '@mui/icons-material/DirectionsBus'
 import { Route, Trip, StopTimeWithRealtime, Stop, Agency, VehiclePosition } from 'gtfs-sqljs'
 import type { Remote } from 'comlink'
 import type { GtfsWorkerAPI } from '../gtfs.worker'
 import { timeToSeconds } from '../components/utils'
+import { getDistance } from 'geolib'
 
 interface TimetablesTabProps {
   routes: Route[]
@@ -203,6 +203,50 @@ export default function TimetablesTab({ routes, workerApi, agencies, vehicles }:
     }
 
     return null
+  }
+
+  const calculateVehicleProgress = (tripId: string, stopId: string, tripStopTimes: StopTimeWithRealtime[]): number | null => {
+    if (!isToday()) return null
+
+    const vehicle = vehicles.find(v => v.trip_id === tripId)
+    if (!vehicle || !vehicle.position) return null
+
+    const vehicleStatus = getVehicleStatus(tripId, stopId)
+    if (!vehicleStatus) return null
+
+    // If vehicle is at the stop, return 100%
+    if (vehicleStatus === 'at-stop') {
+      return 100
+    }
+
+    // If vehicle is approaching, calculate progress based on geospatial distance
+    const currentStopIndex = tripStopTimes.findIndex(st => st.stop_id === stopId)
+    if (currentStopIndex === -1 || currentStopIndex === 0) return null
+
+    const currentStop = orderedStops.find(s => s.stop_id === stopId)
+    const previousStopId = tripStopTimes[currentStopIndex - 1].stop_id
+    const previousStop = orderedStops.find(s => s.stop_id === previousStopId)
+
+    if (!currentStop?.stop_lat || !currentStop?.stop_lon ||
+        !previousStop?.stop_lat || !previousStop?.stop_lon) {
+      return null
+    }
+
+    try {
+      const totalDistance = getDistance(
+        { latitude: previousStop.stop_lat, longitude: previousStop.stop_lon },
+        { latitude: currentStop.stop_lat, longitude: currentStop.stop_lon }
+      )
+      const distanceFromPrev = getDistance(
+        { latitude: previousStop.stop_lat, longitude: previousStop.stop_lon },
+        { latitude: vehicle.position.latitude, longitude: vehicle.position.longitude }
+      )
+      const percentage = Math.min(100, Math.max(0, (distanceFromPrev / totalDistance) * 100))
+      return percentage
+    } catch (err) {
+      console.error('Error calculating distance:', err)
+      return null
+    }
   }
 
   return (
@@ -394,38 +438,45 @@ export default function TimetablesTab({ routes, workerApi, agencies, vehicles }:
                             const scheduledTime = formatTime(stopTime.departure_time)
                             const realtimeTime = isToday() ? getRealtimeDepartureTime(stopTime) : null
                             const vehicleStatus = getVehicleStatus(tt.trip.trip_id, stopTime.stop_id)
+                            const vehicleProgress = calculateVehicleProgress(tt.trip.trip_id, stopTime.stop_id, tt.stopTimes)
 
                             return (
                               <TableCell key={tripIdx} align="center">
                                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
-                                  {vehicleStatus === 'at-stop' && (
-                                    <DirectionsBusIcon
+                                  {vehicleProgress !== null && (
+                                    <Box
                                       sx={{
-                                        fontSize: 16,
-                                        color: 'success.main',
+                                        width: 6,
+                                        height: 32,
+                                        bgcolor: 'grey.200',
+                                        borderRadius: 1,
+                                        overflow: 'hidden',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        justifyContent: 'flex-start',
                                         flexShrink: 0
                                       }}
-                                    />
-                                  )}
-                                  {vehicleStatus === 'approaching' && (
-                                    <DirectionsBusIcon
-                                      sx={{
-                                        fontSize: 16,
-                                        color: 'warning.main',
-                                        flexShrink: 0,
-                                        '@keyframes pulse': {
-                                          '0%, 100%': {
-                                            opacity: 1,
-                                            transform: 'scale(1)'
-                                          },
-                                          '50%': {
-                                            opacity: 0.7,
-                                            transform: 'scale(0.95)'
-                                          }
-                                        },
-                                        animation: 'pulse 1.5s ease-in-out infinite'
-                                      }}
-                                    />
+                                    >
+                                      <Box
+                                        sx={{
+                                          width: '100%',
+                                          height: `${vehicleProgress}%`,
+                                          bgcolor: vehicleStatus === 'at-stop' ? 'success.main' : 'warning.main',
+                                          transition: 'height 0.3s ease-in-out',
+                                          ...(vehicleStatus === 'approaching' && {
+                                            '@keyframes pulse': {
+                                              '0%, 100%': {
+                                                opacity: 1
+                                              },
+                                              '50%': {
+                                                opacity: 0.7
+                                              }
+                                            },
+                                            animation: 'pulse 1.5s ease-in-out infinite'
+                                          })
+                                        }}
+                                      />
+                                    </Box>
                                   )}
                                   <Box>
                                     {realtimeTime ? (
@@ -461,22 +512,50 @@ export default function TimetablesTab({ routes, workerApi, agencies, vehicles }:
                 </Typography>
                 <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <DirectionsBusIcon
+                    <Box
                       sx={{
-                        fontSize: 16,
-                        color: 'success.main'
+                        width: 6,
+                        height: 24,
+                        bgcolor: 'grey.200',
+                        borderRadius: 1,
+                        overflow: 'hidden',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'flex-start'
                       }}
-                    />
-                    <Typography variant="caption">Vehicle at stop</Typography>
+                    >
+                      <Box
+                        sx={{
+                          width: '100%',
+                          height: '100%',
+                          bgcolor: 'success.main'
+                        }}
+                      />
+                    </Box>
+                    <Typography variant="caption">Vehicle at stop (100%)</Typography>
                   </Box>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <DirectionsBusIcon
+                    <Box
                       sx={{
-                        fontSize: 16,
-                        color: 'warning.main'
+                        width: 6,
+                        height: 24,
+                        bgcolor: 'grey.200',
+                        borderRadius: 1,
+                        overflow: 'hidden',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'flex-start'
                       }}
-                    />
-                    <Typography variant="caption">Vehicle approaching (animated)</Typography>
+                    >
+                      <Box
+                        sx={{
+                          width: '100%',
+                          height: '60%',
+                          bgcolor: 'warning.main'
+                        }}
+                      />
+                    </Box>
+                    <Typography variant="caption">Vehicle approaching (progress bar)</Typography>
                   </Box>
                 </Box>
               </Box>
