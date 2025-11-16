@@ -215,7 +215,7 @@ function App() {
   }
 
   // Load GTFS data
-  const loadGtfs = useCallback(async (gtfsUrl?: string, gtfsRtUrls?: string[]) => {
+  const loadGtfs = useCallback(async (gtfsUrl: string, gtfsRtUrls: string[]) => {
     setLoading(true)
     setLoadingProgress(null)
     setError(null)
@@ -245,12 +245,8 @@ function App() {
     }
 
     try {
-      // Use provided URLs or fall back to config
-      const urlToLoad = gtfsUrl ?? config.gtfsUrl
-      const rtUrlsToLoad = gtfsRtUrls ?? config.gtfsRtUrls
-
-      const proxiedGtfsUrl = proxyUrl(urlToLoad)
-      const proxiedRtUrls = rtUrlsToLoad
+      const proxiedGtfsUrl = proxyUrl(gtfsUrl)
+      const proxiedRtUrls = gtfsRtUrls
         .filter(url => url.trim() !== '')
         .map(url => proxyUrl(url))
 
@@ -300,7 +296,7 @@ function App() {
       setLoadingProgress(null)
       setGtfsLoaded(false)
     }
-  }, [config.gtfsUrl, config.gtfsRtUrls, initializeWorker])
+  }, [initializeWorker])
 
   const updateRealtimeData = useCallback(async () => {
     if (!workerRef.current || !gtfsLoaded || !gtfsApiRef.current) return
@@ -352,7 +348,8 @@ function App() {
 
   // Initial load
   useEffect(() => {
-    loadGtfs()
+    loadGtfs(config.gtfsUrl, config.gtfsRtUrls)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Auto-refresh realtime data

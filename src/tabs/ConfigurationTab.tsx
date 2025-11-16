@@ -15,7 +15,7 @@ interface ConfigurationTabProps {
   presets: PresetConfig[]
   loading: boolean
   error: string | null
-  loadGtfs: (gtfsUrl?: string, gtfsRtUrls?: string[]) => void
+  loadGtfs: (gtfsUrl: string, gtfsRtUrls: string[]) => void
   downloadDatabase: () => void
   gtfsLoaded: boolean
   agencies: Agency[]
@@ -183,7 +183,7 @@ export default function ConfigurationTab({
               <Button
                 variant="contained"
                 color="error"
-                onClick={() => loadGtfs()}
+                onClick={() => loadGtfs(config.gtfsUrl, config.gtfsRtUrls)}
                 disabled={loading}
               >
                 {loading ? 'Loading...' : 'Reload GTFS'}
