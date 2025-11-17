@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Box, Typography, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Collapse, IconButton } from '@mui/material'
+import { Box, Typography, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Collapse, IconButton, Chip } from '@mui/material'
 import { KeyboardArrowDown, KeyboardArrowUp } from '@mui/icons-material'
-import { Alert, VehiclePosition, TripUpdate, StopTimeUpdate } from 'gtfs-sqljs'
+import { Alert, VehiclePosition, TripUpdate, StopTimeUpdate, Route, Trip } from 'gtfs-sqljs'
 import type { Remote } from 'comlink'
 import type { GtfsWorkerAPI } from '../gtfs.worker'
 
@@ -58,21 +58,52 @@ export default function RealtimeDataTab({ workerApi, realtimeLastUpdated }: Real
   const [initialLoading, setInitialLoading] = useState(true)
   const [expandedTripId, setExpandedTripId] = useState<string | null>(null)
   const [tripStopTimes, setTripStopTimes] = useState<Record<string, StopTimeUpdate[]>>({})
+  const [routes, setRoutes] = useState<Record<string, Route>>({})
+  const [trips, setTrips] = useState<Record<string, Trip>>({})
 
   useEffect(() => {
     const fetchData = async () => {
       if (!workerApi) return
 
       try {
-        const [trips, vehicles, serviceAlerts] = await Promise.all([
+        const [tripUpdateData, vehicles, serviceAlerts] = await Promise.all([
           workerApi.getTripUpdates(),
           workerApi.getVehiclePositions(),
           workerApi.getAlerts()
         ])
 
-        setTripUpdates(trips)
+        setTripUpdates(tripUpdateData)
         setVehiclePositions(vehicles)
         setAlerts(serviceAlerts)
+
+        // Fetch routes and trips for the trip updates
+        const routeIds = [...new Set(tripUpdateData.map(tu => tu.route_id).filter(Boolean))]
+        const tripIds = [...new Set(tripUpdateData.map(tu => tu.trip_id).filter(Boolean))]
+
+        const [routeData, tripData] = await Promise.all([
+          Promise.all(routeIds.map(async (routeId) => {
+            const routes = await workerApi.getRoutes({ routeId })
+            return routes[0]
+          })),
+          Promise.all(tripIds.map(async (tripId) => {
+            const trips = await workerApi.getTrips({ tripId })
+            return trips[0]
+          }))
+        ])
+
+        // Create lookup maps
+        const routeMap: Record<string, Route> = {}
+        routeData.forEach(route => {
+          if (route) routeMap[route.route_id] = route
+        })
+
+        const tripMap: Record<string, Trip> = {}
+        tripData.forEach(trip => {
+          if (trip) tripMap[trip.trip_id] = trip
+        })
+
+        setRoutes(routeMap)
+        setTrips(tripMap)
       } catch (error) {
         console.error('Error fetching GTFS-RT data:', error)
       } finally {
@@ -131,8 +162,8 @@ export default function RealtimeDataTab({ workerApi, realtimeLastUpdated }: Real
             <TableHead>
               <TableRow>
                 <TableCell />
-                <TableCell>Trip ID</TableCell>
-                <TableCell>Route ID</TableCell>
+                <TableCell>Trip</TableCell>
+                <TableCell>Route</TableCell>
                 <TableCell>Vehicle ID</TableCell>
                 <TableCell>Vehicle Label</TableCell>
                 <TableCell>Delay (s)</TableCell>
@@ -156,8 +187,36 @@ export default function RealtimeDataTab({ workerApi, realtimeLastUpdated }: Real
                         {expandedTripId === tu.trip_id ? <KeyboardArrowUp /> : <KeyboardArrowDown />}
                       </IconButton>
                     </TableCell>
-                    <TableCell>{tu.trip_id}</TableCell>
-                    <TableCell>{tu.route_id || '-'}</TableCell>
+                    <TableCell>
+                      {trips[tu.trip_id] ? (
+                        <Box>
+                          <Typography variant="body2">{trips[tu.trip_id].trip_short_name || tu.trip_id}</Typography>
+                          <Typography variant="caption" color="text.secondary">{tu.trip_id}</Typography>
+                        </Box>
+                      ) : (
+                        tu.trip_id
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {tu.route_id && routes[tu.route_id] ? (
+                        <Box>
+                          <Chip
+                            label={routes[tu.route_id].route_short_name || routes[tu.route_id].route_long_name}
+                            size="small"
+                            sx={{
+                              bgcolor: `#${routes[tu.route_id].route_color || 'cccccc'}`,
+                              color: `#${routes[tu.route_id].route_text_color || '000000'}`,
+                              fontWeight: 'bold'
+                            }}
+                          />
+                          <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                            {tu.route_id}
+                          </Typography>
+                        </Box>
+                      ) : (
+                        tu.route_id || '-'
+                      )}
+                    </TableCell>
                     <TableCell>{tu.vehicle?.id || '-'}</TableCell>
                     <TableCell>{tu.vehicle?.label || '-'}</TableCell>
                     <TableCell>{tu.delay ?? '-'}</TableCell>
