@@ -5,6 +5,7 @@ import {
   Route,
   Trip,
   StopTimeWithRealtime,
+  StopTimeUpdate,
   Alert,
   VehiclePosition,
   TripUpdate,
@@ -14,6 +15,7 @@ import {
   TripFilters,
   StopFilters,
   StopTimeFilters,
+  StopTimeUpdateFilters,
   AlertFilters,
   VehiclePositionFilters,
   TripUpdateFilters
@@ -55,6 +57,7 @@ export interface GtfsWorkerAPI {
   getTrips: (filters?: ExtendedTripFilters) => Trip[]
   getStops: (filters?: StopFilters) => Stop[]
   getStopTimes: (filters?: ExtendedStopTimeFilters) => StopTimeWithRealtime[]
+  getStopTimeUpdates: (filters?: StopTimeUpdateFilters) => StopTimeUpdate[]
   getAlerts: (filters?: AlertFilters) => Alert[]
   getVehiclePositions: (filters?: VehiclePositionFilters) => VehiclePosition[]
   getTripUpdates: (filters?: TripUpdateFilters) => TripUpdate[]
@@ -164,6 +167,13 @@ class GtfsWorker implements GtfsWorkerAPI {
     }
 
     return this.gtfs.getStopTimes(filters) as StopTimeWithRealtime[]
+  }
+
+  getStopTimeUpdates(filters?: StopTimeUpdateFilters): StopTimeUpdate[] {
+    if (!this.gtfs) {
+      throw new Error('GTFS not loaded')
+    }
+    return this.gtfs.getStopTimeUpdates(filters)
   }
 
   getStops(filters?: StopFilters): Stop[] {

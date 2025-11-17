@@ -18,7 +18,8 @@ import {
   Schedule as ScheduleIcon,
   Map as MapIcon,
   Warning as WarningIcon,
-  DirectionsBus as BusIcon
+  DirectionsBus as BusIcon,
+  Update as UpdateIcon
 } from '@mui/icons-material'
 import {
   Agency,
@@ -41,6 +42,7 @@ import MapTab from './tabs/MapTab'
 import AlertsTab from './tabs/AlertsTab'
 import DeparturesTab from './tabs/DeparturesTab'
 import DeparturesV2Tab from './tabs/DeparturesV2Tab'
+import RealtimeDataTab from './tabs/RealtimeDataTab'
 
 const PROXY_BASE = 'https://gtfs-proxy.sys-dev-run.re/proxy/'
 
@@ -468,6 +470,7 @@ function App() {
               <Tab icon={<WarningIcon />} label="Alerts" disabled={!gtfsLoaded} />
               <Tab icon={<BusIcon />} label="Departures at Stop" disabled={!gtfsLoaded} />
               <Tab icon={<BusIcon />} label="Departures v2" disabled={!gtfsLoaded} />
+              <Tab icon={<UpdateIcon />} label="GTFS-RT Data" disabled={!gtfsLoaded} />
               <Tab icon={<SettingsIcon />} label="Configuration" />
             </Tabs>
           </Container>
@@ -539,7 +542,14 @@ function App() {
               />
             )}
 
-            {currentTab === 6 && (
+            {currentTab === 6 && gtfsLoaded && (
+              <RealtimeDataTab
+                workerApi={workerRef.current}
+                realtimeLastUpdated={realtimeLastUpdated}
+              />
+            )}
+
+            {currentTab === 7 && (
               <ConfigurationTab
                 config={config}
                 setConfig={setConfig}
