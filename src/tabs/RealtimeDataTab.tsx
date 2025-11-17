@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Box, Typography, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow } from '@mui/material'
+import { Box, Typography, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Collapse, IconButton } from '@mui/material'
+import { KeyboardArrowDown, KeyboardArrowUp } from '@mui/icons-material'
 import { Alert, VehiclePosition, TripUpdate, StopTimeUpdate } from 'gtfs-sqljs'
 import type { Remote } from 'comlink'
 import type { GtfsWorkerAPI } from '../gtfs.worker'
@@ -52,25 +53,24 @@ interface RealtimeDataTabProps {
 
 export default function RealtimeDataTab({ workerApi, realtimeLastUpdated }: RealtimeDataTabProps) {
   const [tripUpdates, setTripUpdates] = useState<TripUpdate[]>([])
-  const [stopTimeUpdates, setStopTimeUpdates] = useState<StopTimeUpdate[]>([])
   const [vehiclePositions, setVehiclePositions] = useState<VehiclePosition[]>([])
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [initialLoading, setInitialLoading] = useState(true)
+  const [expandedTripId, setExpandedTripId] = useState<string | null>(null)
+  const [tripStopTimes, setTripStopTimes] = useState<Record<string, StopTimeUpdate[]>>({})
 
   useEffect(() => {
     const fetchData = async () => {
       if (!workerApi) return
 
       try {
-        const [trips, stopTimes, vehicles, serviceAlerts] = await Promise.all([
+        const [trips, vehicles, serviceAlerts] = await Promise.all([
           workerApi.getTripUpdates(),
-          workerApi.getStopTimeUpdates(),
           workerApi.getVehiclePositions(),
           workerApi.getAlerts()
         ])
 
         setTripUpdates(trips)
-        setStopTimeUpdates(stopTimes)
         setVehiclePositions(vehicles)
         setAlerts(serviceAlerts)
       } catch (error) {
@@ -82,6 +82,25 @@ export default function RealtimeDataTab({ workerApi, realtimeLastUpdated }: Real
 
     fetchData()
   }, [workerApi, realtimeLastUpdated])
+
+  const handleTripClick = async (tripId: string) => {
+    if (expandedTripId === tripId) {
+      setExpandedTripId(null)
+      return
+    }
+
+    setExpandedTripId(tripId)
+
+    // Fetch stop times if not already cached
+    if (!tripStopTimes[tripId] && workerApi) {
+      try {
+        const stopTimes = await workerApi.getStopTimeUpdates({ tripId })
+        setTripStopTimes(prev => ({ ...prev, [tripId]: stopTimes }))
+      } catch (error) {
+        console.error('Error fetching stop times for trip:', error)
+      }
+    }
+  }
 
   if (initialLoading) {
     return (
@@ -111,6 +130,7 @@ export default function RealtimeDataTab({ workerApi, realtimeLastUpdated }: Real
           <Table stickyHeader size="small">
             <TableHead>
               <TableRow>
+                <TableCell />
                 <TableCell>Trip ID</TableCell>
                 <TableCell>Route ID</TableCell>
                 <TableCell>Vehicle ID</TableCell>
@@ -124,54 +144,66 @@ export default function RealtimeDataTab({ workerApi, realtimeLastUpdated }: Real
             </TableHead>
             <TableBody>
               {tripUpdates.map((tu, idx) => (
-                <TableRow key={idx} hover>
-                  <TableCell>{tu.trip_id}</TableCell>
-                  <TableCell>{tu.route_id || '-'}</TableCell>
-                  <TableCell>{tu.vehicle?.id || '-'}</TableCell>
-                  <TableCell>{tu.vehicle?.label || '-'}</TableCell>
-                  <TableCell>{tu.delay ?? '-'}</TableCell>
-                  <TableCell>{formatScheduleRelationship(tu.schedule_relationship)}</TableCell>
-                  <TableCell>{tu.timestamp ? formatTime(tu.timestamp) : '-'}</TableCell>
-                  <TableCell>{tu.stop_time_update?.length || 0}</TableCell>
-                  <TableCell>{formatRelativeTime(tu.rt_last_updated)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      </Paper>
-
-      {/* Stop Time Updates */}
-      <Paper sx={{ mb: 4 }}>
-        <Box sx={{ p: 2, bgcolor: 'primary.main', color: 'white' }}>
-          <Typography variant="h6">Stop Time Updates ({stopTimeUpdates.length})</Typography>
-        </Box>
-        <TableContainer sx={{ maxHeight: 400 }}>
-          <Table stickyHeader size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Trip ID</TableCell>
-                <TableCell>Stop Sequence</TableCell>
-                <TableCell>Stop ID</TableCell>
-                <TableCell>Arrival Delay (s)</TableCell>
-                <TableCell>Arrival Time</TableCell>
-                <TableCell>Departure Delay (s)</TableCell>
-                <TableCell>Departure Time</TableCell>
-                <TableCell>Schedule Relationship</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {stopTimeUpdates.map((stu, idx) => (
-                <TableRow key={idx} hover>
-                  <TableCell>{stu.trip_id || '-'}</TableCell>
-                  <TableCell>{stu.stop_sequence ?? '-'}</TableCell>
-                  <TableCell>{stu.stop_id || '-'}</TableCell>
-                  <TableCell>{stu.arrival?.delay ?? '-'}</TableCell>
-                  <TableCell>{stu.arrival?.time ? formatTime(stu.arrival.time) : '-'}</TableCell>
-                  <TableCell>{stu.departure?.delay ?? '-'}</TableCell>
-                  <TableCell>{stu.departure?.time ? formatTime(stu.departure.time) : '-'}</TableCell>
-                  <TableCell>{stu.schedule_relationship ?? '-'}</TableCell>
-                </TableRow>
+                <>
+                  <TableRow
+                    key={idx}
+                    hover
+                    onClick={() => handleTripClick(tu.trip_id)}
+                    sx={{ cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
+                  >
+                    <TableCell>
+                      <IconButton size="small">
+                        {expandedTripId === tu.trip_id ? <KeyboardArrowUp /> : <KeyboardArrowDown />}
+                      </IconButton>
+                    </TableCell>
+                    <TableCell>{tu.trip_id}</TableCell>
+                    <TableCell>{tu.route_id || '-'}</TableCell>
+                    <TableCell>{tu.vehicle?.id || '-'}</TableCell>
+                    <TableCell>{tu.vehicle?.label || '-'}</TableCell>
+                    <TableCell>{tu.delay ?? '-'}</TableCell>
+                    <TableCell>{formatScheduleRelationship(tu.schedule_relationship)}</TableCell>
+                    <TableCell>{tu.timestamp ? formatTime(tu.timestamp) : '-'}</TableCell>
+                    <TableCell>{tu.stop_time_update?.length || 0}</TableCell>
+                    <TableCell>{formatRelativeTime(tu.rt_last_updated)}</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={10}>
+                      <Collapse in={expandedTripId === tu.trip_id} timeout="auto" unmountOnExit>
+                        <Box sx={{ margin: 2 }}>
+                          <Typography variant="h6" gutterBottom component="div">
+                            Stop Time Updates
+                          </Typography>
+                          <Table size="small">
+                            <TableHead>
+                              <TableRow>
+                                <TableCell>Stop Sequence</TableCell>
+                                <TableCell>Stop ID</TableCell>
+                                <TableCell>Arrival Delay (s)</TableCell>
+                                <TableCell>Arrival Time</TableCell>
+                                <TableCell>Departure Delay (s)</TableCell>
+                                <TableCell>Departure Time</TableCell>
+                                <TableCell>Schedule Relationship</TableCell>
+                              </TableRow>
+                            </TableHead>
+                            <TableBody>
+                              {tripStopTimes[tu.trip_id]?.map((stu, stuIdx) => (
+                                <TableRow key={stuIdx}>
+                                  <TableCell>{stu.stop_sequence ?? '-'}</TableCell>
+                                  <TableCell>{stu.stop_id || '-'}</TableCell>
+                                  <TableCell>{stu.arrival?.delay ?? '-'}</TableCell>
+                                  <TableCell>{stu.arrival?.time ? formatTime(stu.arrival.time) : '-'}</TableCell>
+                                  <TableCell>{stu.departure?.delay ?? '-'}</TableCell>
+                                  <TableCell>{stu.departure?.time ? formatTime(stu.departure.time) : '-'}</TableCell>
+                                  <TableCell>{stu.schedule_relationship ?? '-'}</TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </Box>
+                      </Collapse>
+                    </TableCell>
+                  </TableRow>
+                </>
               ))}
             </TableBody>
           </Table>
@@ -190,6 +222,7 @@ export default function RealtimeDataTab({ workerApi, realtimeLastUpdated }: Real
                 <TableCell>Trip ID</TableCell>
                 <TableCell>Route ID</TableCell>
                 <TableCell>Vehicle ID</TableCell>
+                <TableCell>Label</TableCell>
                 <TableCell>Latitude</TableCell>
                 <TableCell>Longitude</TableCell>
                 <TableCell>Bearing</TableCell>
@@ -206,6 +239,7 @@ export default function RealtimeDataTab({ workerApi, realtimeLastUpdated }: Real
                   <TableCell>{vp.trip_id}</TableCell>
                   <TableCell>{vp.route_id || '-'}</TableCell>
                   <TableCell>{vp.vehicle?.id || '-'}</TableCell>
+                  <TableCell>{vp.vehicle?.label || '-'}</TableCell>
                   <TableCell>{vp.position?.latitude?.toFixed(5) || '-'}</TableCell>
                   <TableCell>{vp.position?.longitude?.toFixed(5) || '-'}</TableCell>
                   <TableCell>{vp.position?.bearing ?? '-'}</TableCell>
