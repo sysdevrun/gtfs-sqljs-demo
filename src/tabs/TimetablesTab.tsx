@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   Box,
   Paper,
@@ -51,6 +51,35 @@ export default function TimetablesTab({ routes, workerApi, agencies, vehicles }:
   const [orderedStops, setOrderedStops] = useState<Stop[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+
+  const directionsRef = useRef<HTMLDivElement>(null)
+  const timetableRef = useRef<HTMLDivElement>(null)
+
+  // Scroll to directions when a route is selected
+  useEffect(() => {
+    if (selectedRoute && directions.length > 0 && directionsRef.current) {
+      setTimeout(() => {
+        directionsRef.current?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+          inline: 'nearest'
+        })
+      }, 100)
+    }
+  }, [selectedRoute, directions.length])
+
+  // Scroll to timetable when a direction is selected
+  useEffect(() => {
+    if (selectedDirection && timetable.length > 0 && timetableRef.current) {
+      setTimeout(() => {
+        timetableRef.current?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+          inline: 'nearest'
+        })
+      }, 100)
+    }
+  }, [selectedDirection, timetable.length])
 
   // Load trips for selected route and date
   useEffect(() => {
@@ -299,7 +328,7 @@ export default function TimetablesTab({ routes, workerApi, agencies, vehicles }:
 
           {/* Direction selection (horizontal buttons, 50% width each) */}
           {selectedRoute && directions.length > 0 && (
-            <Box sx={{ display: 'flex', gap: 2 }}>
+            <Box ref={directionsRef} sx={{ display: 'flex', gap: 2 }}>
               {directions.map((dir) => {
                 const bgColor = selectedRoute.route_color ? `#${selectedRoute.route_color}` : '#CCCCCC'
                 const textColor = selectedRoute.route_text_color ? `#${selectedRoute.route_text_color}` : '#000000'
@@ -378,7 +407,7 @@ export default function TimetablesTab({ routes, workerApi, agencies, vehicles }:
       </Box>
 
       {/* part2: Bottom - Timetable table */}
-      <Box>
+      <Box ref={timetableRef}>
           {error && (
             <Alert severity="error" sx={{ mb: 3 }}>
               {error}
@@ -398,7 +427,16 @@ export default function TimetablesTab({ routes, workerApi, agencies, vehicles }:
                       <TableCell>Stop</TableCell>
                       {timetable.map((tt, idx) => (
                         <TableCell key={idx} align="center">
-                          {tt.trip.trip_short_name || `Trip ${idx + 1}`}
+                          <Box>
+                            <Typography variant="body2">
+                              {tt.trip.trip_short_name || `Trip ${idx + 1}`}
+                            </Typography>
+                            {tt.trip.block_id && (
+                              <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: '0.65rem' }}>
+                                {tt.trip.block_id}
+                              </Typography>
+                            )}
+                          </Box>
                         </TableCell>
                       ))}
                     </TableRow>
