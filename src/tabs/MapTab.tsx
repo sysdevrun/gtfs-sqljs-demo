@@ -139,7 +139,6 @@ function createColoredIcon(
 }
 
 function calculateLastStop(
-  vehicle: VehiclePosition,
   stopTimes: StopTimeWithRealtime[],
   gtfsApi: GtfsApiAdapter
 ): LastStopInfo | null {
@@ -271,7 +270,7 @@ export default function MapTab({ vehicles, routes, gtfsApi }: MapTabProps) {
 
             // Calculate last stop information
             if (stopTimes.length > 0) {
-              lastStop = calculateLastStop(vehicle, stopTimes, gtfsApi)
+              lastStop = calculateLastStop(stopTimes, gtfsApi)
             }
           } catch (err) {
             console.error('Error fetching trip data:', err)
