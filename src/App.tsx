@@ -449,7 +449,7 @@ function App() {
             <BusIcon sx={{ mr: 2 }} />
             <Box>
               <Typography variant="h6" component="div">
-                GTFS Real-Time Explorer
+                {agencies.length > 0 && `${agencies.map(a => a.agency_name).join(', ')} - `}GTFS Real-Time Explorer
               </Typography>
               <Typography variant="caption" sx={{ opacity: 0.9 }}>
                 Explore transit data with gtfs-sqljs
