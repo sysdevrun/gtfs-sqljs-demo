@@ -13,7 +13,7 @@ interface MapTabProps {
   gtfsApi: GtfsApiAdapter | null
 }
 
-interface NextStopInfo {
+interface LastStopInfo {
   stopName: string
   scheduledArrival: string    // HH:MM format
   realtimeArrival: string | null  // HH:MM format if available
@@ -25,7 +25,7 @@ interface VehicleWithDetails {
   route: Route | null
   trip: Trip | null
   stopTimes: StopTimeWithRealtime[]
-  nextStop: NextStopInfo | null
+  lastStop: LastStopInfo | null
 }
 
 // Fix for default marker icon in Leaflet
@@ -39,36 +39,33 @@ L.Icon.Default.mergeOptions({
 function createColoredIcon(
   textColor: string,
   bgColor: string,
-  label: string,
-  vehicleId: string | null,
-  nextStopInfo: NextStopInfo | null
+  tripLabel: string | null,
+  vehicleLabel: string | null,
+  lastStopInfo: LastStopInfo | null
 ): L.DivIcon {
-  // Build the display label with vehicle ID if available
-  const mainLabel = vehicleId ? `${label} (${vehicleId})` : label
-
-  // Build next stop display
-  let nextStopHtml = ''
-  if (nextStopInfo) {
+  // Build last stop display
+  let lastStopHtml = ''
+  if (lastStopInfo) {
     // Determine delay color
     let delayColor = textColor
     let delayText = ''
-    if (nextStopInfo.arrivalDelay !== null) {
-      const delayMinutes = Math.floor(Math.abs(nextStopInfo.arrivalDelay) / 60)
-      if (nextStopInfo.arrivalDelay > 120) { // More than 2 minutes late
+    if (lastStopInfo.arrivalDelay !== null) {
+      const delayMinutes = Math.floor(Math.abs(lastStopInfo.arrivalDelay) / 60)
+      if (lastStopInfo.arrivalDelay > 120) { // More than 2 minutes late
         delayColor = '#ff4444'
         delayText = ` <span style="color: ${delayColor};">+${delayMinutes}m</span>`
-      } else if (nextStopInfo.arrivalDelay < -120) { // More than 2 minutes early
+      } else if (lastStopInfo.arrivalDelay < -120) { // More than 2 minutes early
         delayColor = '#44ff44'
         delayText = ` <span style="color: ${delayColor};">-${delayMinutes}m</span>`
       }
     }
 
-    const arrivalTime = nextStopInfo.realtimeArrival || nextStopInfo.scheduledArrival
-    const realtimeIndicator = nextStopInfo.realtimeArrival ? '' : '<span style="opacity: 0.6;"> (sched)</span>'
+    const arrivalTime = lastStopInfo.realtimeArrival || lastStopInfo.scheduledArrival
+    const realtimeIndicator = lastStopInfo.realtimeArrival ? '' : '<span style="opacity: 0.6;"> (sched)</span>'
 
-    nextStopHtml = `
+    lastStopHtml = `
       <div style="font-size: 12px; opacity: 0.95; margin-top: 3px; line-height: 1.3;">
-        → ${nextStopInfo.stopName}
+        → ${lastStopInfo.stopName}
       </div>
       <div style="font-size: 11px; opacity: 0.9; line-height: 1.3;">
         ${arrivalTime}${delayText}${realtimeIndicator}
@@ -76,27 +73,64 @@ function createColoredIcon(
     `
   }
 
+  const pinWidth = 30
+  const pinHeight = 40
+  const gap = 10
+
   return L.divIcon({
     className: 'custom-marker',
     html: `
       <div style="
-        background-color: ${bgColor};
-        color: ${textColor};
-        padding: 8px 16px;
-        border-radius: 6px;
-        font-weight: bold;
-        font-size: 16px;
-        white-space: nowrap;
-        border: 3px solid white;
-        box-shadow: 0 3px 8px rgba(0,0,0,0.5);
-        min-width: 50px;
-        text-align: center;
-        line-height: 1.4;
+        display: inline-flex;
+        flex-direction: column;
+        align-items: center;
+        position: relative;
+        transform: translate(-50%, -100%);
       ">
-        <div style="font-size: 16px; font-weight: bold;">
-          ${mainLabel}
+        <!-- Text above marker -->
+        <div style="
+          color: #000000;
+          font-weight: bold;
+          font-size: 11px;
+          white-space: nowrap;
+          text-align: center;
+          line-height: 1.1;
+          text-shadow:
+            -1px -1px 0 #fff,
+            1px -1px 0 #fff,
+            -1px 1px 0 #fff,
+            1px 1px 0 #fff,
+            0 0 3px #fff;
+        ">
+          <div style="font-weight: bold;">
+            ${tripLabel} (${vehicleLabel})
+          </div>
+          ${lastStopHtml}
         </div>
-        ${nextStopHtml}
+
+        <!-- Gap -->
+        <div style="height: ${gap}px;"></div>
+
+        <!-- Pin marker -->
+        <svg width="${pinWidth}" height="${pinHeight}" viewBox="0 0 30 40" style="display: block;">
+          <!-- Pin shape: circle + triangle -->
+          <defs>
+            <filter id="pin-shadow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur in="SourceAlpha" stdDeviation="2"/>
+              <feOffset dx="0" dy="2" result="offsetblur"/>
+              <feComponentTransfer>
+                <feFuncA type="linear" slope="0.3"/>
+              </feComponentTransfer>
+              <feMerge>
+                <feMergeNode/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
+          </defs>
+          <!-- Teardrop shape -->
+          <circle cx="15" cy="12" r="11" fill="${bgColor}" stroke="white" stroke-width="2" filter="url(#pin-shadow)"/>
+          <path d="M 15 23 L 8 32 L 15 40 L 22 32 Z" fill="${bgColor}" stroke="white" stroke-width="2" filter="url(#pin-shadow)"/>
+        </svg>
       </div>
     `,
     iconSize: [0, 0],
@@ -104,57 +138,40 @@ function createColoredIcon(
   })
 }
 
-function calculateNextStop(
+function calculateLastStop(
   vehicle: VehiclePosition,
   stopTimes: StopTimeWithRealtime[],
   gtfsApi: GtfsApiAdapter
-): NextStopInfo | null {
+): LastStopInfo | null {
   try {
     // Sort stop times by stop_sequence to ensure correct order
     const sortedStopTimes = [...stopTimes].sort((a, b) => a.stop_sequence - b.stop_sequence)
 
-    // Find current position in the trip
-    let currentStopIndex = -1
-
-    // Try to use current_stop_sequence if available
-    if (vehicle.current_stop_sequence !== undefined && vehicle.current_stop_sequence !== null) {
-      currentStopIndex = sortedStopTimes.findIndex(st => st.stop_sequence >= vehicle.current_stop_sequence!)
-    }
-    // Otherwise try to use stop_id
-    else if (vehicle.stop_id) {
-      currentStopIndex = sortedStopTimes.findIndex(st => st.stop_id === vehicle.stop_id)
-    }
-
-    // If we couldn't determine current position, use the first upcoming stop
-    if (currentStopIndex === -1) {
-      currentStopIndex = 0
-    }
-
-    // Get the next stop (current if vehicle hasn't reached it yet, or next one)
-    const nextStopTime = sortedStopTimes[currentStopIndex]
-    if (!nextStopTime) return null
+    // Get the last stop (destination)
+    const lastStopTime = sortedStopTimes[sortedStopTimes.length - 1]
+    if (!lastStopTime) return null
 
     // Get stop information
-    const stops = gtfsApi.getStops({ stopId: nextStopTime.stop_id })
-    const stopName = stops.length > 0 ? stops[0].stop_name : nextStopTime.stop_id
+    const stops = gtfsApi.getStops({ stopId: lastStopTime.stop_id })
+    const stopName = stops.length > 0 ? stops[0].stop_name : lastStopTime.stop_id
 
     // Parse scheduled arrival time (format: "HH:MM:SS")
-    const scheduledArrival = nextStopTime.arrival_time.substring(0, 5) // Get HH:MM
+    const scheduledArrival = lastStopTime.arrival_time.substring(0, 5) // Get HH:MM
 
     // Get realtime arrival if available
     let realtimeArrival: string | null = null
     let arrivalDelay: number | null = null
 
-    if (nextStopTime.realtime?.arrival_time) {
+    if (lastStopTime.realtime?.arrival_time) {
       // Convert Unix timestamp to HH:MM format
-      const realtimeDate = new Date(nextStopTime.realtime.arrival_time * 1000)
+      const realtimeDate = new Date(lastStopTime.realtime.arrival_time * 1000)
       const hours = realtimeDate.getHours().toString().padStart(2, '0')
       const minutes = realtimeDate.getMinutes().toString().padStart(2, '0')
       realtimeArrival = `${hours}:${minutes}`
 
       // Calculate delay in seconds
       // Parse scheduled time to seconds from midnight
-      const [schedHours, schedMinutes, schedSeconds] = nextStopTime.arrival_time.split(':').map(Number)
+      const [schedHours, schedMinutes, schedSeconds] = lastStopTime.arrival_time.split(':').map(Number)
       const scheduledSeconds = schedHours * 3600 + schedMinutes * 60 + (schedSeconds || 0)
 
       // Get realtime seconds from midnight
@@ -170,7 +187,7 @@ function calculateNextStop(
       arrivalDelay
     }
   } catch (err) {
-    console.error('Error calculating next stop:', err)
+    console.error('Error calculating last stop:', err)
     return null
   }
 }
@@ -244,7 +261,7 @@ export default function MapTab({ vehicles, routes, gtfsApi }: MapTabProps) {
         const route = vehicle.route_id ? routes.find(r => r.route_id === vehicle.route_id) || null : null
         let trip: Trip | null = null
         let stopTimes: StopTimeWithRealtime[] = []
-        let nextStop: NextStopInfo | null = null
+        let lastStop: LastStopInfo | null = null
 
         if (vehicle.trip_id) {
           try {
@@ -252,16 +269,16 @@ export default function MapTab({ vehicles, routes, gtfsApi }: MapTabProps) {
             trip = tripData.trip || null
             stopTimes = tripData.stopTimes || []
 
-            // Calculate next stop information
+            // Calculate last stop information
             if (stopTimes.length > 0) {
-              nextStop = calculateNextStop(vehicle, stopTimes, gtfsApi)
+              lastStop = calculateLastStop(vehicle, stopTimes, gtfsApi)
             }
           } catch (err) {
             console.error('Error fetching trip data:', err)
           }
         }
 
-        details.push({ vehicle, route, trip, stopTimes, nextStop })
+        details.push({ vehicle, route, trip, stopTimes, lastStop })
       }
 
       setVehiclesWithDetails(details)
@@ -325,14 +342,14 @@ export default function MapTab({ vehicles, routes, gtfsApi }: MapTabProps) {
 
                 const textColor = vd.route?.route_text_color ? `#${vd.route.route_text_color}` : '#000000'
                 const bgColor = vd.route?.route_color ? `#${vd.route.route_color}` : '#CCCCCC'
-                const label = vd.trip?.trip_short_name || vd.vehicle.vehicle?.label || 'Vehicle'
-                const vehicleId = vd.vehicle.vehicle?.id || vd.vehicle.vehicle?.label || null
+                const tripLabel = vd.trip?.trip_short_name || null
+                const vehicleLabel = vd.vehicle.vehicle?.label || null
 
                 return (
                   <Marker
                     key={idx}
                     position={[vd.vehicle.position.latitude, vd.vehicle.position.longitude]}
-                    icon={createColoredIcon(textColor, bgColor, label, vehicleId, vd.nextStop)}
+                    icon={createColoredIcon(textColor, bgColor, tripLabel, vehicleLabel, vd.lastStop)}
                     eventHandlers={{
                       click: () => handleMarkerClick(vd)
                     }}
