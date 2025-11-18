@@ -371,8 +371,8 @@ export default function RealtimeDataTab({ workerApi, realtimeLastUpdated }: Real
           <Table stickyHeader size="small">
             <TableHead>
               <TableRow>
-                <TableCell>Trip ID</TableCell>
-                <TableCell>Route ID</TableCell>
+                <TableCell>Trip</TableCell>
+                <TableCell>Route</TableCell>
                 <TableCell>Vehicle ID</TableCell>
                 <TableCell>Label</TableCell>
                 <TableCell>Latitude</TableCell>
@@ -386,10 +386,44 @@ export default function RealtimeDataTab({ workerApi, realtimeLastUpdated }: Real
               </TableRow>
             </TableHead>
             <TableBody>
-              {vehiclePositions.map((vp, idx) => (
+              {[...vehiclePositions].sort((a, b) => {
+                const tripA = trips[a.trip_id]
+                const tripB = trips[b.trip_id]
+                const nameA = tripA?.trip_short_name || a.trip_id
+                const nameB = tripB?.trip_short_name || b.trip_id
+                return nameA.localeCompare(nameB, undefined, { numeric: true })
+              }).map((vp, idx) => (
                 <TableRow key={idx} hover>
-                  <TableCell>{vp.trip_id}</TableCell>
-                  <TableCell>{vp.route_id || '-'}</TableCell>
+                  <TableCell>
+                    {trips[vp.trip_id] ? (
+                      <Box>
+                        <Typography variant="body2">{trips[vp.trip_id].trip_short_name || vp.trip_id}</Typography>
+                        <Typography variant="caption" color="text.secondary">{vp.trip_id}</Typography>
+                      </Box>
+                    ) : (
+                      vp.trip_id
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {vp.route_id && routes[vp.route_id] ? (
+                      <Box>
+                        <Chip
+                          label={routes[vp.route_id].route_short_name || routes[vp.route_id].route_long_name}
+                          size="small"
+                          sx={{
+                            bgcolor: `#${routes[vp.route_id].route_color || 'cccccc'}`,
+                            color: `#${routes[vp.route_id].route_text_color || '000000'}`,
+                            fontWeight: 'bold'
+                          }}
+                        />
+                        <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                          {vp.route_id}
+                        </Typography>
+                      </Box>
+                    ) : (
+                      vp.route_id || '-'
+                    )}
+                  </TableCell>
                   <TableCell>{vp.vehicle?.id || '-'}</TableCell>
                   <TableCell>{vp.vehicle?.label || '-'}</TableCell>
                   <TableCell>{vp.position?.latitude?.toFixed(5) || '-'}</TableCell>
