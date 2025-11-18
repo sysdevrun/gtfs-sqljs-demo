@@ -152,19 +152,11 @@ export default function RealtimeDataTab({ workerApi, realtimeLastUpdated }: Real
         // Combine all route IDs
         const allRouteIds = [...new Set([...routeIds, ...alertRouteIds])]
 
+        // Fetch all data in bulk with single queries
         const [routeData, tripData, stopData] = await Promise.all([
-          Promise.all(allRouteIds.map(async (routeId) => {
-            const routes = await workerApi.getRoutes({ routeId })
-            return routes[0]
-          })),
-          Promise.all(tripIds.map(async (tripId) => {
-            const trips = await workerApi.getTrips({ tripId })
-            return trips[0]
-          })),
-          Promise.all(allStopIds.map(async (stopId) => {
-            const stops = await workerApi.getStops({ stopId })
-            return stops[0]
-          }))
+          allRouteIds.length > 0 ? workerApi.getRoutes({ routeId: allRouteIds }) : Promise.resolve([]),
+          tripIds.length > 0 ? workerApi.getTrips({ tripId: tripIds }) : Promise.resolve([]),
+          allStopIds.length > 0 ? workerApi.getStops({ stopId: allStopIds }) : Promise.resolve([])
         ])
 
         // Create lookup maps
@@ -210,21 +202,18 @@ export default function RealtimeDataTab({ workerApi, realtimeLastUpdated }: Real
         const stopTimes = await workerApi.getStopTimeUpdates({ tripId })
         setTripStopTimes(prev => ({ ...prev, [tripId]: stopTimes }))
 
-        // Fetch stop data for all stops in this trip
+        // Fetch stop data for all stops in this trip with a single query
         const stopIds = [...new Set(stopTimes.map(st => st.stop_id).filter(Boolean))]
-        const stopData = await Promise.all(
-          stopIds.map(async (stopId) => {
-            const stops = await workerApi.getStops({ stopId })
-            return stops[0]
-          })
-        )
+        if (stopIds.length > 0) {
+          const stopData = await workerApi.getStops({ stopId: stopIds })
 
-        // Update stops cache
-        const newStops: Record<string, any> = {}
-        stopData.forEach(stop => {
-          if (stop) newStops[stop.stop_id] = stop
-        })
-        setStops(prev => ({ ...prev, ...newStops }))
+          // Update stops cache
+          const newStops: Record<string, any> = {}
+          stopData.forEach(stop => {
+            if (stop) newStops[stop.stop_id] = stop
+          })
+          setStops(prev => ({ ...prev, ...newStops }))
+        }
       } catch (error) {
         console.error('Error fetching stop times for trip:', error)
       }
