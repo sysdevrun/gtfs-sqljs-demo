@@ -46,6 +46,45 @@ const formatScheduleRelationship = (rel?: number): string => {
   }
 }
 
+// Helper function to format alert cause
+const formatCause = (cause?: number): string => {
+  if (cause === undefined) return 'Unknown'
+  switch (cause) {
+    case 1: return 'Unknown Cause'
+    case 2: return 'Other Cause'
+    case 3: return 'Technical Problem'
+    case 4: return 'Strike'
+    case 5: return 'Demonstration'
+    case 6: return 'Accident'
+    case 7: return 'Holiday'
+    case 8: return 'Weather'
+    case 9: return 'Maintenance'
+    case 10: return 'Construction'
+    case 11: return 'Police Activity'
+    case 12: return 'Medical Emergency'
+    default: return 'Unknown'
+  }
+}
+
+// Helper function to format alert effect
+const formatEffect = (effect?: number): string => {
+  if (effect === undefined) return 'Unknown'
+  switch (effect) {
+    case 1: return 'No Service'
+    case 2: return 'Reduced Service'
+    case 3: return 'Significant Delays'
+    case 4: return 'Detour'
+    case 5: return 'Additional Service'
+    case 6: return 'Modified Service'
+    case 7: return 'Other Effect'
+    case 8: return 'Unknown Effect'
+    case 9: return 'Stop Moved'
+    case 10: return 'No Effect'
+    case 11: return 'Accessibility Issue'
+    default: return 'Unknown'
+  }
+}
+
 interface RealtimeDataTabProps {
   workerApi: Remote<GtfsWorkerAPI> | null
   realtimeLastUpdated: number
@@ -445,8 +484,22 @@ export default function RealtimeDataTab({ workerApi, realtimeLastUpdated }: Real
                       ) : '-'}
                     </TableCell>
                     <TableCell>{alert.id || '-'}</TableCell>
-                    <TableCell>{alert.cause ?? '-'}</TableCell>
-                    <TableCell>{alert.effect ?? '-'}</TableCell>
+                    <TableCell>
+                      <Box>
+                        <Typography variant="body2">{formatCause(alert.cause)}</Typography>
+                        {alert.cause !== undefined && (
+                          <Typography variant="caption" color="text.secondary">{alert.cause}</Typography>
+                        )}
+                      </Box>
+                    </TableCell>
+                    <TableCell>
+                      <Box>
+                        <Typography variant="body2">{formatEffect(alert.effect)}</Typography>
+                        {alert.effect !== undefined && (
+                          <Typography variant="caption" color="text.secondary">{alert.effect}</Typography>
+                        )}
+                      </Box>
+                    </TableCell>
                     <TableCell>
                       {alert.active_period?.[0]
                         ? formatActivePeriod(alert.active_period[0].start, alert.active_period[0].end)
