@@ -174,7 +174,13 @@ export default function RealtimeDataTab({ workerApi, realtimeLastUpdated }: Real
               </TableRow>
             </TableHead>
             <TableBody>
-              {tripUpdates.map((tu, idx) => (
+              {[...tripUpdates].sort((a, b) => {
+                const tripA = trips[a.trip_id]
+                const tripB = trips[b.trip_id]
+                const nameA = tripA?.trip_short_name || a.trip_id
+                const nameB = tripB?.trip_short_name || b.trip_id
+                return nameA.localeCompare(nameB, undefined, { numeric: true })
+              }).map((tu, idx) => (
                 <>
                   <TableRow
                     key={idx}
