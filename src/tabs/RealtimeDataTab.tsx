@@ -81,14 +81,33 @@ export default function RealtimeDataTab({ workerApi, realtimeLastUpdated }: Real
         const routeIds = [...new Set(tripUpdateData.map(tu => tu.route_id).filter(Boolean))]
         const tripIds = [...new Set(tripUpdateData.map(tu => tu.trip_id).filter(Boolean))]
 
-        const [routeData, tripData] = await Promise.all([
-          Promise.all(routeIds.map(async (routeId) => {
+        // Fetch routes and stops for alerts
+        const alertRouteIds = [...new Set(
+          serviceAlerts.flatMap(alert =>
+            alert.informed_entity?.map(entity => entity.route_id).filter(Boolean) || []
+          )
+        )]
+        const alertStopIds = [...new Set(
+          serviceAlerts.flatMap(alert =>
+            alert.informed_entity?.map(entity => entity.stop_id).filter(Boolean) || []
+          )
+        )]
+
+        // Combine all route IDs
+        const allRouteIds = [...new Set([...routeIds, ...alertRouteIds])]
+
+        const [routeData, tripData, stopData] = await Promise.all([
+          Promise.all(allRouteIds.map(async (routeId) => {
             const routes = await workerApi.getRoutes({ routeId })
             return routes[0]
           })),
           Promise.all(tripIds.map(async (tripId) => {
             const trips = await workerApi.getTrips({ tripId })
             return trips[0]
+          })),
+          Promise.all(alertStopIds.map(async (stopId) => {
+            const stops = await workerApi.getStops({ stopId })
+            return stops[0]
           }))
         ])
 
@@ -103,8 +122,14 @@ export default function RealtimeDataTab({ workerApi, realtimeLastUpdated }: Real
           if (trip) tripMap[trip.trip_id] = trip
         })
 
+        const stopMap: Record<string, any> = {}
+        stopData.forEach(stop => {
+          if (stop) stopMap[stop.stop_id] = stop
+        })
+
         setRoutes(routeMap)
         setTrips(tripMap)
+        setStops(stopMap)
       } catch (error) {
         console.error('Error fetching GTFS-RT data:', error)
       } finally {
@@ -354,6 +379,8 @@ export default function RealtimeDataTab({ workerApi, realtimeLastUpdated }: Real
               <TableRow>
                 <TableCell>Header</TableCell>
                 <TableCell>Description</TableCell>
+                <TableCell>Impacted Routes</TableCell>
+                <TableCell>Impacted Stops</TableCell>
                 <TableCell>ID</TableCell>
                 <TableCell>Cause</TableCell>
                 <TableCell>Effect</TableCell>
@@ -363,38 +390,81 @@ export default function RealtimeDataTab({ workerApi, realtimeLastUpdated }: Real
               </TableRow>
             </TableHead>
             <TableBody>
-              {alerts.map((alert, idx) => (
-                <TableRow key={idx} hover>
-                  <TableCell>
-                    {typeof alert.header_text === 'string'
-                      ? alert.header_text
-                      : alert.header_text?.translation?.[0]?.text || '-'}
-                  </TableCell>
-                  <TableCell>
-                    {typeof alert.description_text === 'string'
-                      ? alert.description_text
-                      : alert.description_text?.translation?.[0]?.text || '-'}
-                  </TableCell>
-                  <TableCell>{alert.id || '-'}</TableCell>
-                  <TableCell>{alert.cause ?? '-'}</TableCell>
-                  <TableCell>{alert.effect ?? '-'}</TableCell>
-                  <TableCell>
-                    {alert.active_period?.[0]
-                      ? formatActivePeriod(alert.active_period[0].start, alert.active_period[0].end)
-                      : '-'}
-                  </TableCell>
-                  <TableCell>
-                    {alert.url ? (
-                      typeof alert.url === 'string' ? (
-                        <a href={alert.url} target="_blank" rel="noopener noreferrer">Link</a>
-                      ) : (
-                        <a href={alert.url?.translation?.[0]?.text} target="_blank" rel="noopener noreferrer">Link</a>
-                      )
-                    ) : '-'}
-                  </TableCell>
-                  <TableCell>{formatRelativeTime(alert.rt_last_updated)}</TableCell>
-                </TableRow>
-              ))}
+              {alerts.map((alert, idx) => {
+                // Extract unique route IDs and stop IDs from informed entities
+                const impactedRouteIds = [...new Set(
+                  alert.informed_entity?.map(entity => entity.route_id).filter(Boolean) || []
+                )]
+                const impactedStopIds = [...new Set(
+                  alert.informed_entity?.map(entity => entity.stop_id).filter(Boolean) || []
+                )]
+                const impactedStopNames = impactedStopIds
+                  .map(stopId => stops[stopId]?.stop_name || stopId)
+                  .join(', ')
+
+                return (
+                  <TableRow key={idx} hover>
+                    <TableCell>
+                      {typeof alert.header_text === 'string'
+                        ? alert.header_text
+                        : alert.header_text?.translation?.[0]?.text || '-'}
+                    </TableCell>
+                    <TableCell>
+                      {typeof alert.description_text === 'string'
+                        ? alert.description_text
+                        : alert.description_text?.translation?.[0]?.text || '-'}
+                    </TableCell>
+                    <TableCell>
+                      {impactedRouteIds.length > 0 ? (
+                        <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                          {impactedRouteIds.map(routeId => {
+                            const route = routes[routeId]
+                            return route ? (
+                              <Chip
+                                key={routeId}
+                                label={route.route_short_name || route.route_long_name}
+                                size="small"
+                                sx={{
+                                  bgcolor: `#${route.route_color || 'cccccc'}`,
+                                  color: `#${route.route_text_color || '000000'}`,
+                                  fontWeight: 'bold'
+                                }}
+                              />
+                            ) : (
+                              <span key={routeId}>{routeId}</span>
+                            )
+                          })}
+                        </Box>
+                      ) : '-'}
+                    </TableCell>
+                    <TableCell>
+                      {impactedStopIds.length > 0 ? (
+                        <span title={impactedStopNames} style={{ textDecoration: 'underline', cursor: 'help' }}>
+                          {impactedStopIds.length}
+                        </span>
+                      ) : '-'}
+                    </TableCell>
+                    <TableCell>{alert.id || '-'}</TableCell>
+                    <TableCell>{alert.cause ?? '-'}</TableCell>
+                    <TableCell>{alert.effect ?? '-'}</TableCell>
+                    <TableCell>
+                      {alert.active_period?.[0]
+                        ? formatActivePeriod(alert.active_period[0].start, alert.active_period[0].end)
+                        : '-'}
+                    </TableCell>
+                    <TableCell>
+                      {alert.url ? (
+                        typeof alert.url === 'string' ? (
+                          <a href={alert.url} target="_blank" rel="noopener noreferrer">Link</a>
+                        ) : (
+                          <a href={alert.url?.translation?.[0]?.text} target="_blank" rel="noopener noreferrer">Link</a>
+                        )
+                      ) : '-'}
+                    </TableCell>
+                    <TableCell>{formatRelativeTime(alert.rt_last_updated)}</TableCell>
+                  </TableRow>
+                )
+              })}
             </TableBody>
           </Table>
         </TableContainer>
