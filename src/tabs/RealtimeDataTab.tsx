@@ -256,6 +256,18 @@ export default function RealtimeDataTab({ workerApi, realtimeLastUpdated }: Real
             </TableHead>
             <TableBody>
               {[...tripUpdates].sort((a, b) => {
+                const routeA = a.route_id ? routes[a.route_id] : null
+                const routeB = b.route_id ? routes[b.route_id] : null
+
+                // Sort by route_sort_order first
+                const sortOrderA = routeA?.route_sort_order ?? 999999
+                const sortOrderB = routeB?.route_sort_order ?? 999999
+
+                if (sortOrderA !== sortOrderB) {
+                  return sortOrderA - sortOrderB
+                }
+
+                // Then by trip short name
                 const tripA = trips[a.trip_id]
                 const tripB = trips[b.trip_id]
                 const nameA = tripA?.trip_short_name || a.trip_id
@@ -387,6 +399,18 @@ export default function RealtimeDataTab({ workerApi, realtimeLastUpdated }: Real
             </TableHead>
             <TableBody>
               {[...vehiclePositions].sort((a, b) => {
+                const routeA = a.route_id ? routes[a.route_id] : null
+                const routeB = b.route_id ? routes[b.route_id] : null
+
+                // Sort by route_sort_order first
+                const sortOrderA = routeA?.route_sort_order ?? 999999
+                const sortOrderB = routeB?.route_sort_order ?? 999999
+
+                if (sortOrderA !== sortOrderB) {
+                  return sortOrderA - sortOrderB
+                }
+
+                // Then by trip short name
                 const tripA = trips[a.trip_id]
                 const tripB = trips[b.trip_id]
                 const nameA = tripA?.trip_short_name || a.trip_id
