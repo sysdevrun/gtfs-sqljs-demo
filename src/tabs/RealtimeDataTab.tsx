@@ -60,6 +60,7 @@ export default function RealtimeDataTab({ workerApi, realtimeLastUpdated }: Real
   const [tripStopTimes, setTripStopTimes] = useState<Record<string, StopTimeUpdate[]>>({})
   const [routes, setRoutes] = useState<Record<string, Route>>({})
   const [trips, setTrips] = useState<Record<string, Trip>>({})
+  const [stops, setStops] = useState<Record<string, any>>({})
 
   useEffect(() => {
     const fetchData = async () => {
@@ -127,6 +128,22 @@ export default function RealtimeDataTab({ workerApi, realtimeLastUpdated }: Real
       try {
         const stopTimes = await workerApi.getStopTimeUpdates({ tripId })
         setTripStopTimes(prev => ({ ...prev, [tripId]: stopTimes }))
+
+        // Fetch stop data for all stops in this trip
+        const stopIds = [...new Set(stopTimes.map(st => st.stop_id).filter(Boolean))]
+        const stopData = await Promise.all(
+          stopIds.map(async (stopId) => {
+            const stops = await workerApi.getStops({ stopId })
+            return stops[0]
+          })
+        )
+
+        // Update stops cache
+        const newStops: Record<string, any> = {}
+        stopData.forEach(stop => {
+          if (stop) newStops[stop.stop_id] = stop
+        })
+        setStops(prev => ({ ...prev, ...newStops }))
       } catch (error) {
         console.error('Error fetching stop times for trip:', error)
       }
@@ -235,14 +252,11 @@ export default function RealtimeDataTab({ workerApi, realtimeLastUpdated }: Real
                     <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={10}>
                       <Collapse in={expandedTripId === tu.trip_id} timeout="auto" unmountOnExit>
                         <Box sx={{ margin: 2 }}>
-                          <Typography variant="h6" gutterBottom component="div">
-                            Stop Time Updates
-                          </Typography>
                           <Table size="small">
                             <TableHead>
                               <TableRow>
                                 <TableCell>Stop Sequence</TableCell>
-                                <TableCell>Stop ID</TableCell>
+                                <TableCell>Stop</TableCell>
                                 <TableCell>Arrival Delay (s)</TableCell>
                                 <TableCell>Arrival Time</TableCell>
                                 <TableCell>Departure Delay (s)</TableCell>
@@ -254,7 +268,16 @@ export default function RealtimeDataTab({ workerApi, realtimeLastUpdated }: Real
                               {tripStopTimes[tu.trip_id]?.map((stu, stuIdx) => (
                                 <TableRow key={stuIdx}>
                                   <TableCell>{stu.stop_sequence ?? '-'}</TableCell>
-                                  <TableCell>{stu.stop_id || '-'}</TableCell>
+                                  <TableCell>
+                                    {stu.stop_id && stops[stu.stop_id] ? (
+                                      <Box>
+                                        <Typography variant="body2">{stops[stu.stop_id].stop_name}</Typography>
+                                        <Typography variant="caption" color="text.secondary">{stu.stop_id}</Typography>
+                                      </Box>
+                                    ) : (
+                                      stu.stop_id || '-'
+                                    )}
+                                  </TableCell>
                                   <TableCell>{stu.arrival?.delay ?? '-'}</TableCell>
                                   <TableCell>{stu.arrival?.time ? formatTime(stu.arrival.time) : '-'}</TableCell>
                                   <TableCell>{stu.departure?.delay ?? '-'}</TableCell>
