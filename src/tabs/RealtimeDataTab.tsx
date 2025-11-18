@@ -85,6 +85,17 @@ const formatEffect = (effect?: number): string => {
   }
 }
 
+// Helper function to format vehicle current status
+const formatCurrentStatus = (status?: number): string => {
+  if (status === undefined) return 'Unknown'
+  switch (status) {
+    case 0: return 'Incoming At'
+    case 1: return 'Stopped At'
+    case 2: return 'In Transit To'
+    default: return 'Unknown'
+  }
+}
+
 interface RealtimeDataTabProps {
   workerApi: Remote<GtfsWorkerAPI> | null
   realtimeLastUpdated: number
@@ -132,6 +143,12 @@ export default function RealtimeDataTab({ workerApi, realtimeLastUpdated }: Real
           )
         )]
 
+        // Fetch stops for vehicle positions
+        const vehicleStopIds = [...new Set(vehicles.map(v => v.stop_id).filter(Boolean))]
+
+        // Combine all stop IDs
+        const allStopIds = [...new Set([...alertStopIds, ...vehicleStopIds])]
+
         // Combine all route IDs
         const allRouteIds = [...new Set([...routeIds, ...alertRouteIds])]
 
@@ -144,7 +161,7 @@ export default function RealtimeDataTab({ workerApi, realtimeLastUpdated }: Real
             const trips = await workerApi.getTrips({ tripId })
             return trips[0]
           })),
-          Promise.all(alertStopIds.map(async (stopId) => {
+          Promise.all(allStopIds.map(async (stopId) => {
             const stops = await workerApi.getStops({ stopId })
             return stops[0]
           }))
@@ -391,7 +408,7 @@ export default function RealtimeDataTab({ workerApi, realtimeLastUpdated }: Real
                 <TableCell>Longitude</TableCell>
                 <TableCell>Bearing</TableCell>
                 <TableCell>Speed (m/s)</TableCell>
-                <TableCell>Stop ID</TableCell>
+                <TableCell>Stop</TableCell>
                 <TableCell>Current Stop Seq.</TableCell>
                 <TableCell>Current Status</TableCell>
                 <TableCell>Timestamp</TableCell>
@@ -454,9 +471,25 @@ export default function RealtimeDataTab({ workerApi, realtimeLastUpdated }: Real
                   <TableCell>{vp.position?.longitude?.toFixed(5) || '-'}</TableCell>
                   <TableCell>{vp.position?.bearing ?? '-'}</TableCell>
                   <TableCell>{vp.position?.speed ?? '-'}</TableCell>
-                  <TableCell>{vp.stop_id || '-'}</TableCell>
+                  <TableCell>
+                    {vp.stop_id && stops[vp.stop_id] ? (
+                      <Box>
+                        <Typography variant="body2">{stops[vp.stop_id].stop_name}</Typography>
+                        <Typography variant="caption" color="text.secondary">{vp.stop_id}</Typography>
+                      </Box>
+                    ) : (
+                      vp.stop_id || '-'
+                    )}
+                  </TableCell>
                   <TableCell>{vp.current_stop_sequence ?? '-'}</TableCell>
-                  <TableCell>{vp.current_status ?? '-'}</TableCell>
+                  <TableCell>
+                    <Box>
+                      <Typography variant="body2">{formatCurrentStatus(vp.current_status)}</Typography>
+                      {vp.current_status !== undefined && (
+                        <Typography variant="caption" color="text.secondary">{vp.current_status}</Typography>
+                      )}
+                    </Box>
+                  </TableCell>
                   <TableCell>{vp.timestamp ? formatTime(vp.timestamp) : '-'}</TableCell>
                 </TableRow>
               ))}
