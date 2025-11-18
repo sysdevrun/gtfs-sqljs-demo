@@ -154,9 +154,9 @@ export default function RealtimeDataTab({ workerApi, realtimeLastUpdated }: Real
 
         // Fetch all data in bulk with single queries
         const [routeData, tripData, stopData] = await Promise.all([
-          allRouteIds.length > 0 ? workerApi.getRoutes({ routeId: allRouteIds }) : Promise.resolve([]),
-          tripIds.length > 0 ? workerApi.getTrips({ tripId: tripIds }) : Promise.resolve([]),
-          allStopIds.length > 0 ? workerApi.getStops({ stopId: allStopIds }) : Promise.resolve([])
+          allRouteIds.length > 0 ? workerApi.getRoutes({ routeId: allRouteIds as string[] }) : Promise.resolve([]),
+          tripIds.length > 0 ? workerApi.getTrips({ tripId: tripIds as string[] }) : Promise.resolve([]),
+          allStopIds.length > 0 ? workerApi.getStops({ stopId: allStopIds as string[] }) : Promise.resolve([])
         ])
 
         // Create lookup maps
@@ -203,7 +203,7 @@ export default function RealtimeDataTab({ workerApi, realtimeLastUpdated }: Real
         setTripStopTimes(prev => ({ ...prev, [tripId]: stopTimes }))
 
         // Fetch stop data for all stops in this trip with a single query
-        const stopIds = [...new Set(stopTimes.map(st => st.stop_id).filter(Boolean))]
+        const stopIds = [...new Set(stopTimes.map(st => st.stop_id).filter(Boolean))] as string[]
         if (stopIds.length > 0) {
           const stopData = await workerApi.getStops({ stopId: stopIds })
 
@@ -512,10 +512,10 @@ export default function RealtimeDataTab({ workerApi, realtimeLastUpdated }: Real
               {alerts.map((alert, idx) => {
                 // Extract unique route IDs and stop IDs from informed entities
                 const impactedRouteIds = [...new Set(
-                  alert.informed_entity?.map(entity => entity.route_id).filter(Boolean) || []
+                  alert.informed_entity?.map(entity => entity.route_id).filter((id): id is string => Boolean(id)) || []
                 )]
                 const impactedStopIds = [...new Set(
-                  alert.informed_entity?.map(entity => entity.stop_id).filter(Boolean) || []
+                  alert.informed_entity?.map(entity => entity.stop_id).filter((id): id is string => Boolean(id)) || []
                 )]
                 const impactedStopNames = impactedStopIds
                   .map(stopId => stops[stopId]?.stop_name || stopId)
