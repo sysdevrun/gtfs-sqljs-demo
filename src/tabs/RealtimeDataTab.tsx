@@ -107,6 +107,7 @@ export default function RealtimeDataTab({ workerApi, realtimeLastUpdated }: Real
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [initialLoading, setInitialLoading] = useState(true)
   const [expandedTripId, setExpandedTripId] = useState<string | null>(null)
+  const [expandedTripIds, setExpandedTripIds] = useState<Set<string>>(new Set())
   const [tripStopTimes, setTripStopTimes] = useState<Record<string, StopTimeUpdate[]>>({})
   const [routes, setRoutes] = useState<Record<string, Route>>({})
   const [trips, setTrips] = useState<Record<string, Trip>>({})
@@ -188,26 +189,38 @@ export default function RealtimeDataTab({ workerApi, realtimeLastUpdated }: Real
     fetchData()
   }, [workerApi, realtimeLastUpdated])
 
-  const handleTripClick = async (tripId: string) => {
-    if (expandedTripId === tripId) {
-      setExpandedTripId(null)
-      return
-    }
+  // Fetch stop times for all expanded trips when real-time data updates or trips are expanded/collapsed
+  useEffect(() => {
+    const fetchExpandedTripStopTimes = async () => {
+      if (!workerApi || expandedTripIds.size === 0) return
 
-    setExpandedTripId(tripId)
-
-    // Fetch stop times if not already cached
-    if (!tripStopTimes[tripId] && workerApi) {
       try {
-        const stopTimes = await workerApi.getStopTimeUpdates({ tripId })
-        setTripStopTimes(prev => ({ ...prev, [tripId]: stopTimes }))
+        const tripIdsArray = Array.from(expandedTripIds)
 
-        // Fetch stop data for all stops in this trip with a single query
-        const stopIds = [...new Set(stopTimes.map(st => st.stop_id).filter(Boolean))] as string[]
-        if (stopIds.length > 0) {
-          const stopData = await workerApi.getStops({ stopId: stopIds })
+        // Fetch stop times for all expanded trips in one query
+        const stopTimesData = await workerApi.getStopTimeUpdates({ tripId: tripIdsArray })
 
-          // Update stops cache
+        // Group stop times by trip_id
+        const stopTimesByTrip: Record<string, StopTimeUpdate[]> = {}
+        stopTimesData.forEach(stopTime => {
+          if (stopTime.trip_id) {
+            if (!stopTimesByTrip[stopTime.trip_id]) {
+              stopTimesByTrip[stopTime.trip_id] = []
+            }
+            stopTimesByTrip[stopTime.trip_id].push(stopTime)
+          }
+        })
+
+        // Update state with fresh stop times
+        setTripStopTimes(stopTimesByTrip)
+
+        // Fetch stop metadata for all stops in the results
+        const allStopIds = [...new Set(
+          stopTimesData.map(st => st.stop_id).filter((id): id is string => Boolean(id))
+        )]
+
+        if (allStopIds.length > 0) {
+          const stopData = await workerApi.getStops({ stopId: allStopIds })
           const newStops: Record<string, any> = {}
           stopData.forEach(stop => {
             if (stop) newStops[stop.stop_id] = stop
@@ -215,8 +228,26 @@ export default function RealtimeDataTab({ workerApi, realtimeLastUpdated }: Real
           setStops(prev => ({ ...prev, ...newStops }))
         }
       } catch (error) {
-        console.error('Error fetching stop times for trip:', error)
+        console.error('Error fetching stop times for expanded trips:', error)
       }
+    }
+
+    fetchExpandedTripStopTimes()
+  }, [workerApi, realtimeLastUpdated, expandedTripIds])
+
+  const handleTripClick = (tripId: string) => {
+    if (expandedTripId === tripId) {
+      // Collapse the trip
+      setExpandedTripId(null)
+      setExpandedTripIds(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(tripId)
+        return newSet
+      })
+    } else {
+      // Expand the trip
+      setExpandedTripId(tripId)
+      setExpandedTripIds(prev => new Set(prev).add(tripId))
     }
   }
 
