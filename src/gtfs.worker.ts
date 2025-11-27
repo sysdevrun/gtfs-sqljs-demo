@@ -18,7 +18,9 @@ import {
   StopTimeUpdateFilters,
   AlertFilters,
   VehiclePositionFilters,
-  TripUpdateFilters
+  TripUpdateFilters,
+  ShapeFilters,
+  GeoJsonFeatureCollection
 } from 'gtfs-sqljs'
 
 export interface ProgressInfo {
@@ -71,6 +73,9 @@ export interface GtfsWorkerAPI {
 
   // Stop list methods
   buildOrderedStopList: (tripIds: string[]) => Stop[]
+
+  // Shape methods
+  getShapesToGeojson: (filters?: ShapeFilters, precision?: number) => GeoJsonFeatureCollection
 }
 
 class GtfsWorker implements GtfsWorkerAPI {
@@ -90,7 +95,7 @@ class GtfsWorker implements GtfsWorkerAPI {
       this.gtfs = await GtfsSqlJs.fromZip(gtfsUrl, {
         realtimeFeedUrls: gtfsRtUrls,
         stalenessThreshold: 120,
-        skipFiles: ['shapes.txt', 'fare_attributes.txt'],
+        skipFiles: ['fare_attributes.txt'],
         locateFile: (filename: string) => {
           if (filename.endsWith('.wasm')) {
             // WASM files are at the base path, not relative to worker location
@@ -231,6 +236,13 @@ class GtfsWorker implements GtfsWorkerAPI {
       throw new Error('GTFS not loaded')
     }
     return this.gtfs.buildOrderedStopList(tripIds)
+  }
+
+  getShapesToGeojson(filters?: ShapeFilters, precision?: number): GeoJsonFeatureCollection {
+    if (!this.gtfs) {
+      throw new Error('GTFS not loaded')
+    }
+    return this.gtfs.getShapesToGeojson(filters, precision)
   }
 }
 

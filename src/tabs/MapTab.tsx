@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Box, Paper, Typography, Dialog, DialogTitle, DialogContent, Fab } from '@mui/material'
-import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, useMap, GeoJSON } from 'react-leaflet'
 import { MyLocation as MyLocationIcon } from '@mui/icons-material'
 import L from 'leaflet'
-import { VehiclePosition, Route, Trip, StopTimeWithRealtime } from 'gtfs-sqljs'
+import { VehiclePosition, Route, Trip, StopTimeWithRealtime, GeoJsonFeatureCollection } from 'gtfs-sqljs'
+import { Remote } from 'comlink'
+import type { GtfsWorkerAPI } from '../gtfs.worker'
 import { GtfsApiAdapter } from '../utils/GtfsApiAdapter'
 import 'leaflet/dist/leaflet.css'
 
@@ -11,6 +13,7 @@ interface MapTabProps {
   vehicles: VehiclePosition[]
   routes: Route[]
   gtfsApi: GtfsApiAdapter | null
+  workerApi: Remote<GtfsWorkerAPI> | null
 }
 
 interface LastStopInfo {
@@ -241,12 +244,54 @@ function MapBounds({
   return null
 }
 
-export default function MapTab({ vehicles, routes, gtfsApi }: MapTabProps) {
+export default function MapTab({ vehicles, routes, gtfsApi, workerApi }: MapTabProps) {
   const [vehiclesWithDetails, setVehiclesWithDetails] = useState<VehicleWithDetails[]>([])
   const [selectedVehicle, setSelectedVehicle] = useState<VehicleWithDetails | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [hasUserInteracted, setHasUserInteracted] = useState(false)
   const [shouldRecenter, setShouldRecenter] = useState(false)
+  const [shapesGeoJson, setShapesGeoJson] = useState<GeoJsonFeatureCollection | null>(null)
+
+  // Load shapes GeoJSON
+  useEffect(() => {
+    const loadShapes = async () => {
+      if (!workerApi) return
+
+      try {
+        const geojson = await workerApi.getShapesToGeojson()
+        setShapesGeoJson(geojson)
+        console.log(`Loaded ${geojson.features.length} shape features`)
+      } catch (err) {
+        console.error('Error loading shapes:', err)
+      }
+    }
+
+    loadShapes()
+  }, [workerApi])
+
+  // Create a map of route_id to route color
+  const routeColorMap = new Map<string, string>()
+  routes.forEach(route => {
+    if (route.route_color) {
+      routeColorMap.set(route.route_id, `#${route.route_color}`)
+    }
+  })
+
+  // Style function for GeoJSON shapes
+  const shapeStyle = (feature: GeoJSON.Feature | undefined) => {
+    if (!feature || !feature.properties) {
+      return { color: '#888888', weight: 3, opacity: 0.7 }
+    }
+
+    const routeId = feature.properties.route_id
+    const color = routeId ? routeColorMap.get(routeId) || '#888888' : '#888888'
+
+    return {
+      color,
+      weight: 3,
+      opacity: 0.7
+    }
+  }
 
   useEffect(() => {
     const loadVehicleDetails = async () => {
@@ -330,6 +375,13 @@ export default function MapTab({ vehicles, routes, gtfsApi }: MapTabProps) {
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
+              {shapesGeoJson && (
+                <GeoJSON
+                  key="shapes"
+                  data={shapesGeoJson as GeoJSON.GeoJsonObject}
+                  style={shapeStyle}
+                />
+              )}
               <MapEventHandler onUserInteraction={handleUserInteraction} />
               <MapBounds
                 vehicles={vehicles}

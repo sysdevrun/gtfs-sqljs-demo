@@ -508,6 +508,7 @@ function App() {
                 vehicles={vehicles}
                 routes={routes}
                 gtfsApi={gtfsApiRef.current}
+                workerApi={workerRef.current}
               />
             )}
 
