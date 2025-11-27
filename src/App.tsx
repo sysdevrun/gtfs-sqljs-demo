@@ -344,8 +344,9 @@ function App() {
       setTripUpdates(tripUpdatesData)
 
       // Get and store the last realtime fetch timestamp from the library
+      // The library returns Unix timestamp in seconds, convert to milliseconds
       const rtTimestamp = await workerRef.current.getLastRealtimeFetchTimestamp()
-      setLastRtFetchTimestamp(rtTimestamp)
+      setLastRtFetchTimestamp(rtTimestamp !== null ? rtTimestamp * 1000 : null)
 
       // Update timestamp to trigger stop times refresh
       setRealtimeLastUpdated(Date.now())
