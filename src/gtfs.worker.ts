@@ -67,6 +67,7 @@ export interface GtfsWorkerAPI {
   // Realtime methods
   fetchRealtimeData: () => Promise<void>
   getActiveServiceIds: (date: string) => string[]
+  getLastRealtimeFetchTimestamp: () => number | null
 
   // Database methods
   getDatabase: () => Uint8Array | null
@@ -221,6 +222,13 @@ class GtfsWorker implements GtfsWorkerAPI {
       throw new Error('GTFS not loaded')
     }
     await this.gtfs.fetchRealtimeData()
+  }
+
+  getLastRealtimeFetchTimestamp(): number | null {
+    if (!this.gtfs) {
+      return null
+    }
+    return this.gtfs.getLastRealtimeFetchTimestamp()
   }
 
   getDatabase(): Uint8Array | null {
