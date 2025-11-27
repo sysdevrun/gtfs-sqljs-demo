@@ -220,26 +220,41 @@ function MapEventHandler({ onUserInteraction }: { onUserInteraction: () => void 
 function MapBounds({
   vehicles,
   hasUserInteracted,
-  shouldRecenter
+  shouldRecenter,
+  shapesGeoJson
 }: {
   vehicles: VehiclePosition[]
   hasUserInteracted: boolean
   shouldRecenter: boolean
+  shapesGeoJson: GeoJsonFeatureCollection | null
 }) {
   const map = useMap()
 
   useEffect(() => {
     // Only auto-center if user hasn't interacted OR if recenter was explicitly requested
-    if (vehicles.length > 0 && (!hasUserInteracted || shouldRecenter)) {
-      const bounds = vehicles
-        .filter(v => v.position?.latitude && v.position?.longitude)
-        .map(v => [v.position!.latitude!, v.position!.longitude!] as [number, number])
+    if (!hasUserInteracted || shouldRecenter) {
+      // First try to use vehicle positions
+      if (vehicles.length > 0) {
+        const bounds = vehicles
+          .filter(v => v.position?.latitude && v.position?.longitude)
+          .map(v => [v.position!.latitude!, v.position!.longitude!] as [number, number])
 
-      if (bounds.length > 0) {
-        map.fitBounds(bounds, { padding: [50, 50] })
+        if (bounds.length > 0) {
+          map.fitBounds(bounds, { padding: [50, 50] })
+          return
+        }
+      }
+
+      // If no vehicles, try to center on first shape coordinates
+      if (shapesGeoJson && shapesGeoJson.features.length > 0) {
+        const firstFeature = shapesGeoJson.features[0]
+        if (firstFeature.geometry.type === 'LineString' && firstFeature.geometry.coordinates.length > 0) {
+          const [lng, lat] = firstFeature.geometry.coordinates[0]
+          map.setView([lat, lng], 12)
+        }
       }
     }
-  }, [vehicles, map, hasUserInteracted, shouldRecenter])
+  }, [vehicles, map, hasUserInteracted, shouldRecenter, shapesGeoJson])
 
   return null
 }
@@ -353,9 +368,21 @@ export default function MapTab({ vehicles, routes, gtfsApi, workerApi }: MapTabP
     setTimeout(() => setShouldRecenter(false), 100)
   }
 
-  const center: [number, number] = vehiclesWithDetails.length > 0 && vehiclesWithDetails[0].vehicle.position
-    ? [vehiclesWithDetails[0].vehicle.position.latitude!, vehiclesWithDetails[0].vehicle.position.longitude!]
-    : [48.8566, 2.3522] // Default to Paris
+  // Calculate initial center: vehicles first, then shapes, then default to Paris
+  const getInitialCenter = (): [number, number] => {
+    if (vehiclesWithDetails.length > 0 && vehiclesWithDetails[0].vehicle.position) {
+      return [vehiclesWithDetails[0].vehicle.position.latitude!, vehiclesWithDetails[0].vehicle.position.longitude!]
+    }
+    if (shapesGeoJson && shapesGeoJson.features.length > 0) {
+      const firstFeature = shapesGeoJson.features[0]
+      if (firstFeature.geometry.type === 'LineString' && firstFeature.geometry.coordinates.length > 0) {
+        const [lng, lat] = firstFeature.geometry.coordinates[0]
+        return [lat, lng]
+      }
+    }
+    return [48.8566, 2.3522] // Default to Paris
+  }
+  const center = getInitialCenter()
 
   return (
     <Box sx={{ p: 3, height: 'calc(100vh - 150px)' }}>
@@ -381,6 +408,7 @@ export default function MapTab({ vehicles, routes, gtfsApi, workerApi }: MapTabP
             vehicles={vehicles}
             hasUserInteracted={hasUserInteracted}
             shouldRecenter={shouldRecenter}
+            shapesGeoJson={shapesGeoJson}
           />
           {vehiclesWithDetails.map((vd, idx) => {
             if (!vd.vehicle.position?.latitude || !vd.vehicle.position?.longitude) return null
