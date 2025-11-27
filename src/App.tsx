@@ -160,6 +160,8 @@ function App() {
   const [loadingProgress, setLoadingProgress] = useState<ProgressInfo | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [realtimeLastUpdated, setRealtimeLastUpdated] = useState<number>(0)
+  const [lastRtFetchTimestamp, setLastRtFetchTimestamp] = useState<number | null>(null)
+  const [secondsSinceLastUpdate, setSecondsSinceLastUpdate] = useState<number | null>(null)
 
   // Web Worker reference
   const workerRef = useRef<Remote<GtfsWorkerAPI> | null>(null)
@@ -341,6 +343,10 @@ function App() {
       setVehicles(sortedVehicles)
       setTripUpdates(tripUpdatesData)
 
+      // Get and store the last realtime fetch timestamp from the library
+      const rtTimestamp = await workerRef.current.getLastRealtimeFetchTimestamp()
+      setLastRtFetchTimestamp(rtTimestamp)
+
       // Update timestamp to trigger stop times refresh
       setRealtimeLastUpdated(Date.now())
     } catch (err) {
@@ -369,6 +375,25 @@ function App() {
 
     return () => clearInterval(interval)
   }, [gtfsLoaded, config.updateInterval, updateRealtimeData])
+
+  // Update seconds since last realtime update every second
+  useEffect(() => {
+    if (lastRtFetchTimestamp === null) {
+      setSecondsSinceLastUpdate(null)
+      return
+    }
+
+    const updateSeconds = () => {
+      const now = Date.now()
+      const seconds = Math.floor((now - lastRtFetchTimestamp) / 1000)
+      setSecondsSinceLastUpdate(seconds)
+    }
+
+    updateSeconds()
+    const interval = setInterval(updateSeconds, 1000)
+
+    return () => clearInterval(interval)
+  }, [lastRtFetchTimestamp])
 
   // Load trips for selected route (Browse Data tab)
   useEffect(() => {
@@ -454,7 +479,9 @@ function App() {
                 {agencies.length > 0 && `${agencies.map(a => a.agency_name).join(', ')} - `}GTFS Real-Time Explorer
               </Typography>
               <Typography variant="caption" sx={{ opacity: 0.9 }}>
-                Explore transit data with gtfs-sqljs
+                {secondsSinceLastUpdate !== null
+                  ? `GTFS-RT: last update ${secondsSinceLastUpdate} seconds ago`
+                  : 'Explore transit data with gtfs-sqljs'}
               </Typography>
             </Box>
           </Toolbar>
