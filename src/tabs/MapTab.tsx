@@ -360,71 +360,63 @@ export default function MapTab({ vehicles, routes, gtfsApi, workerApi }: MapTabP
   return (
     <Box sx={{ p: 3, height: 'calc(100vh - 150px)' }}>
       <Paper sx={{ height: '100%', overflow: 'hidden', position: 'relative' }}>
-        {vehiclesWithDetails.length === 0 ? (
-          <Box sx={{ p: 3 }}>
-            <Typography>No vehicle positions available</Typography>
-          </Box>
-        ) : (
-          <>
-            <MapContainer
-              center={center}
-              zoom={13}
-              style={{ height: '100%', width: '100%' }}
-            >
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        <MapContainer
+          center={center}
+          zoom={13}
+          style={{ height: '100%', width: '100%' }}
+        >
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
+          {shapesGeoJson && (
+            <GeoJSON
+              key="shapes"
+              data={shapesGeoJson as GeoJSON.GeoJsonObject}
+              style={shapeStyle}
+            />
+          )}
+          <MapEventHandler onUserInteraction={handleUserInteraction} />
+          <MapBounds
+            vehicles={vehicles}
+            hasUserInteracted={hasUserInteracted}
+            shouldRecenter={shouldRecenter}
+          />
+          {vehiclesWithDetails.map((vd, idx) => {
+            if (!vd.vehicle.position?.latitude || !vd.vehicle.position?.longitude) return null
+
+            const textColor = vd.route?.route_text_color ? `#${vd.route.route_text_color}` : '#000000'
+            const bgColor = vd.route?.route_color ? `#${vd.route.route_color}` : '#CCCCCC'
+            const tripLabel = vd.trip?.trip_short_name || null
+            const vehicleLabel = vd.vehicle.vehicle?.label || null
+
+            return (
+              <Marker
+                key={idx}
+                position={[vd.vehicle.position.latitude, vd.vehicle.position.longitude]}
+                icon={createColoredIcon(textColor, bgColor, tripLabel, vehicleLabel, vd.lastStop)}
+                eventHandlers={{
+                  click: () => handleMarkerClick(vd)
+                }}
               />
-              {shapesGeoJson && (
-                <GeoJSON
-                  key="shapes"
-                  data={shapesGeoJson as GeoJSON.GeoJsonObject}
-                  style={shapeStyle}
-                />
-              )}
-              <MapEventHandler onUserInteraction={handleUserInteraction} />
-              <MapBounds
-                vehicles={vehicles}
-                hasUserInteracted={hasUserInteracted}
-                shouldRecenter={shouldRecenter}
-              />
-              {vehiclesWithDetails.map((vd, idx) => {
-                if (!vd.vehicle.position?.latitude || !vd.vehicle.position?.longitude) return null
+            )
+          })}
+        </MapContainer>
 
-                const textColor = vd.route?.route_text_color ? `#${vd.route.route_text_color}` : '#000000'
-                const bgColor = vd.route?.route_color ? `#${vd.route.route_color}` : '#CCCCCC'
-                const tripLabel = vd.trip?.trip_short_name || null
-                const vehicleLabel = vd.vehicle.vehicle?.label || null
-
-                return (
-                  <Marker
-                    key={idx}
-                    position={[vd.vehicle.position.latitude, vd.vehicle.position.longitude]}
-                    icon={createColoredIcon(textColor, bgColor, tripLabel, vehicleLabel, vd.lastStop)}
-                    eventHandlers={{
-                      click: () => handleMarkerClick(vd)
-                    }}
-                  />
-                )
-              })}
-            </MapContainer>
-
-            {/* Recenter button */}
-            <Fab
-              color="primary"
-              aria-label="recenter map"
-              onClick={handleRecenterClick}
-              sx={{
-                position: 'absolute',
-                bottom: 16,
-                right: 16,
-                zIndex: 1000
-              }}
-            >
-              <MyLocationIcon />
-            </Fab>
-          </>
-        )}
+        {/* Recenter button */}
+        <Fab
+          color="primary"
+          aria-label="recenter map"
+          onClick={handleRecenterClick}
+          sx={{
+            position: 'absolute',
+            bottom: 16,
+            right: 16,
+            zIndex: 1000
+          }}
+        >
+          <MyLocationIcon />
+        </Fab>
       </Paper>
 
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
