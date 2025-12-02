@@ -11,7 +11,11 @@ import {
   Alert,
   FormControlLabel,
   Checkbox,
-  Chip
+  Chip,
+  RadioGroup,
+  Radio,
+  FormControl,
+  FormLabel
 } from '@mui/material'
 import {
   LineChart,
@@ -46,25 +50,42 @@ interface DirectionGroup {
   trips: TripWithTimes[]
 }
 
+type XAxisMode = 'stop_sequence' | 'distance_traveled'
+
 interface ChartDataPoint {
   stopSequence: number
   stopName: string
+  distanceTraveled?: number
   [key: string]: number | string | undefined // For trip data: tripId_theoretical, tripId_realtime
 }
 
-// Hash-based color generation from string
-const stringToColor = (str: string): string => {
-  let hash = 0
-  for (let i = 0; i < str.length; i++) {
-    hash = str.charCodeAt(i) + ((hash << 5) - hash)
-  }
+// Fixed color palette with 20 very distinct colors for trips
+const TRIP_COLORS = [
+  '#e6194b', // Red
+  '#3cb44b', // Green
+  '#4363d8', // Blue
+  '#f58231', // Orange
+  '#911eb4', // Purple
+  '#42d4f4', // Cyan
+  '#f032e6', // Magenta
+  '#bfef45', // Lime
+  '#fabed4', // Pink
+  '#469990', // Teal
+  '#dcbeff', // Lavender
+  '#9A6324', // Brown
+  '#fffac8', // Beige
+  '#800000', // Maroon
+  '#aaffc3', // Mint
+  '#808000', // Olive
+  '#ffd8b1', // Apricot
+  '#000075', // Navy
+  '#a9a9a9', // Grey
+  '#000000', // Black
+]
 
-  // Generate HSL color with good saturation and lightness for visibility
-  const h = Math.abs(hash) % 360
-  const s = 65 + (Math.abs(hash >> 8) % 20) // 65-85%
-  const l = 45 + (Math.abs(hash >> 16) % 15) // 45-60%
-
-  return `hsl(${h}, ${s}%, ${l}%)`
+// Get color for trip based on index within a direction group
+const getTripColor = (tripIndex: number): string => {
+  return TRIP_COLORS[tripIndex % TRIP_COLORS.length]
 }
 
 // Format seconds as duration (e.g., "1h 23m" or "45m 30s")
@@ -89,9 +110,9 @@ export default function TimeDistanceGraphTab({ routes, workerApi, agencies }: Ti
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [stopsMap, setStopsMap] = useState<Map<string, Stop>>(new Map())
+  const [xAxisMode, setXAxisMode] = useState<XAxisMode>('stop_sequence')
 
   const directionsRef = useRef<HTMLDivElement>(null)
-  const graphRef = useRef<HTMLDivElement>(null)
 
   const isToday = selectedDate === new Date().toISOString().split('T')[0]
 
@@ -106,18 +127,6 @@ export default function TimeDistanceGraphTab({ routes, workerApi, agencies }: Ti
       }, 100)
     }
   }, [selectedRoute, directions.length])
-
-  // Scroll to graph when trips are selected
-  useEffect(() => {
-    if (selectedTripIds.size > 0 && graphRef.current) {
-      setTimeout(() => {
-        graphRef.current?.scrollIntoView({
-          behavior: 'smooth',
-          block: 'start'
-        })
-      }, 100)
-    }
-  }, [selectedTripIds.size])
 
   // Load trips for selected route and date
   useEffect(() => {
@@ -211,6 +220,38 @@ export default function TimeDistanceGraphTab({ routes, workerApi, agencies }: Ti
     })
   }
 
+  // Toggle all trips in a direction group
+  const toggleAllTripsInDirection = (direction: DirectionGroup) => {
+    const tripIdsInDirection = direction.trips.map(t => t.trip.trip_id)
+    const allSelected = tripIdsInDirection.every(id => selectedTripIds.has(id))
+
+    setSelectedTripIds(prev => {
+      const newSet = new Set(prev)
+      if (allSelected) {
+        // Deselect all
+        tripIdsInDirection.forEach(id => newSet.delete(id))
+      } else {
+        // Select all
+        tripIdsInDirection.forEach(id => newSet.add(id))
+      }
+      return newSet
+    })
+  }
+
+  // Build a map of trip_id to color index
+  const tripColorMap = new Map<string, number>()
+  directions.forEach(dir => {
+    dir.trips.forEach((tripWithTimes, tripIndex) => {
+      tripColorMap.set(tripWithTimes.trip.trip_id, tripIndex)
+    })
+  })
+
+  // Get color for a trip
+  const getColorForTrip = (tripId: string): string => {
+    const index = tripColorMap.get(tripId) ?? 0
+    return getTripColor(index)
+  }
+
   // Get selected trips data
   const getSelectedTrips = (): TripWithTimes[] => {
     const allTrips: TripWithTimes[] = []
@@ -242,13 +283,18 @@ export default function TimeDistanceGraphTab({ routes, workerApi, agencies }: Ti
     // Build data points for each stop sequence
     const dataPoints: ChartDataPoint[] = []
 
-    // Create a map of stop_sequence to stop_name (using first trip that has it)
+    // Create maps of stop_sequence to stop_name and distance (using first trip that has it)
     const stopNameMap = new Map<number, string>()
+    const distanceMap = new Map<number, number>()
     selectedTrips.forEach(({ stopTimes }) => {
       stopTimes.forEach(st => {
         if (!stopNameMap.has(st.stop_sequence)) {
           const stop = stopsMap.get(st.stop_id)
           stopNameMap.set(st.stop_sequence, stop?.stop_name || `Stop ${st.stop_sequence}`)
+        }
+        // Get shape_dist_traveled if available
+        if (!distanceMap.has(st.stop_sequence) && st.shape_dist_traveled !== undefined && st.shape_dist_traveled !== null) {
+          distanceMap.set(st.stop_sequence, st.shape_dist_traveled)
         }
       })
     })
@@ -256,7 +302,8 @@ export default function TimeDistanceGraphTab({ routes, workerApi, agencies }: Ti
     // Always start at (0, 0) - virtual first point
     const firstPoint: ChartDataPoint = {
       stopSequence: 0,
-      stopName: 'Departure'
+      stopName: 'Departure',
+      distanceTraveled: 0
     }
     selectedTrips.forEach(({ trip }) => {
       const tripKey = trip.trip_short_name || trip.trip_id
@@ -276,7 +323,8 @@ export default function TimeDistanceGraphTab({ routes, workerApi, agencies }: Ti
     stopSequences.forEach(seq => {
       const point: ChartDataPoint = {
         stopSequence: seq,
-        stopName: stopNameMap.get(seq) || `Stop ${seq}`
+        stopName: stopNameMap.get(seq) || `Stop ${seq}`,
+        distanceTraveled: distanceMap.get(seq)
       }
 
       selectedTrips.forEach(({ trip, stopTimes }) => {
@@ -355,19 +403,26 @@ export default function TimeDistanceGraphTab({ routes, workerApi, agencies }: Ti
 
   const { data: chartData, trips: chartTrips } = buildChartData()
 
+  // Check if distance data is available
+  const hasDistanceData = chartData.some(p => p.distanceTraveled !== undefined && p.distanceTraveled > 0)
+
   // Custom tooltip
-  const CustomTooltip = ({ active, payload, label }: { active?: boolean, payload?: Array<{ name: string, value: number, color: string }>, label?: number }) => {
+  const CustomTooltip = ({ active, payload, label }: { active?: boolean, payload?: Array<{ name: string, value: number, color: string }>, label?: number | string }) => {
     if (!active || !payload || payload.length === 0) return null
 
-    const point = chartData.find(p => p.stopSequence === label)
+    // Find point based on x-axis mode
+    const point = xAxisMode === 'stop_sequence'
+      ? chartData.find(p => p.stopSequence === label)
+      : chartData.find(p => p.distanceTraveled === label)
 
     return (
       <Paper sx={{ p: 1.5, maxWidth: 300 }}>
         <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>
-          {point?.stopName || `Stop ${label}`}
+          {point?.stopName || `Stop`}
         </Typography>
         <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
-          Stop sequence: {label}
+          Stop sequence: {point?.stopSequence}
+          {point?.distanceTraveled !== undefined && ` | Distance: ${(point.distanceTraveled / 1000).toFixed(2)} km`}
         </Typography>
         {payload.map((entry, index) => {
           const isRealtime = entry.name.includes('(RT)')
@@ -440,8 +495,8 @@ export default function TimeDistanceGraphTab({ routes, workerApi, agencies }: Ti
           </List>
         </Paper>
 
-        {/* Date selection */}
-        <Paper sx={{ p: 2, width: { xs: '100%', md: '280px' } }}>
+        {/* Date and Options */}
+        <Paper sx={{ p: 2, width: { xs: '100%', md: '300px' } }}>
           <Typography variant="h6" gutterBottom>
             Date
           </Typography>
@@ -474,6 +529,35 @@ export default function TimeDistanceGraphTab({ routes, workerApi, agencies }: Ti
               }
             />
           </Box>
+
+          <FormControl sx={{ mt: 2 }}>
+            <FormLabel sx={{ fontSize: '0.875rem', fontWeight: 'bold' }}>X-Axis</FormLabel>
+            <RadioGroup
+              value={xAxisMode}
+              onChange={(e) => setXAxisMode(e.target.value as XAxisMode)}
+            >
+              <FormControlLabel
+                value="stop_sequence"
+                control={<Radio size="small" />}
+                label={<Typography variant="body2">Stop sequence (with names)</Typography>}
+              />
+              <FormControlLabel
+                value="distance_traveled"
+                control={<Radio size="small" />}
+                label={
+                  <Typography variant="body2">
+                    Distance traveled
+                    {!hasDistanceData && chartData.length > 0 && (
+                      <Typography variant="caption" color="text.secondary" display="block">
+                        (no data available)
+                      </Typography>
+                    )}
+                  </Typography>
+                }
+                disabled={!hasDistanceData && chartData.length > 0}
+              />
+            </RadioGroup>
+          </FormControl>
         </Paper>
       </Box>
 
@@ -483,6 +567,9 @@ export default function TimeDistanceGraphTab({ routes, workerApi, agencies }: Ti
           {directions.map((dir) => {
             const bgColor = selectedRoute.route_color ? `#${selectedRoute.route_color}` : '#CCCCCC'
             const textColor = selectedRoute.route_text_color ? `#${selectedRoute.route_text_color}` : '#000000'
+            const tripIdsInDirection = dir.trips.map(t => t.trip.trip_id)
+            const allSelected = tripIdsInDirection.every(id => selectedTripIds.has(id))
+            const someSelected = tripIdsInDirection.some(id => selectedTripIds.has(id))
 
             return (
               <Paper key={dir.directionId} sx={{ p: 2, mb: 2 }}>
@@ -502,7 +589,7 @@ export default function TimeDistanceGraphTab({ routes, workerApi, agencies }: Ti
                   >
                     {selectedRoute.route_short_name || selectedRoute.route_long_name?.substring(0, 3)}
                   </Box>
-                  <Box>
+                  <Box sx={{ flex: 1 }}>
                     <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
                       {dir.headsign}
                     </Typography>
@@ -510,13 +597,20 @@ export default function TimeDistanceGraphTab({ routes, workerApi, agencies }: Ti
                       {dir.trips.length} trips - Click to select/deselect
                     </Typography>
                   </Box>
+                  <Chip
+                    label={allSelected ? 'Deselect All' : (someSelected ? 'Select All' : 'Select All')}
+                    onClick={() => toggleAllTripsInDirection(dir)}
+                    size="small"
+                    variant={allSelected ? 'filled' : 'outlined'}
+                    color={allSelected ? 'primary' : 'default'}
+                  />
                 </Box>
 
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                  {dir.trips.map(({ trip, stopTimes }) => {
+                  {dir.trips.map(({ trip, stopTimes }, tripIndex) => {
                     const tripKey = trip.trip_short_name || trip.trip_id
                     const isSelected = selectedTripIds.has(trip.trip_id)
-                    const color = stringToColor(tripKey)
+                    const color = getTripColor(tripIndex)
                     const firstDeparture = stopTimes[0]?.departure_time?.substring(0, 5) || ''
 
                     return (
@@ -567,23 +661,54 @@ export default function TimeDistanceGraphTab({ routes, workerApi, agencies }: Ti
 
       {/* Graph */}
       {chartData.length > 0 && chartTrips.length > 0 && (
-        <Paper ref={graphRef} sx={{ p: 2 }}>
+        <Paper sx={{ p: 2 }}>
           <Typography variant="h6" gutterBottom>
             Time-Distance Graph
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            X-axis: Stop sequence | Y-axis: Time since departure
+            X-axis: {xAxisMode === 'stop_sequence' ? 'Stop sequence' : 'Distance traveled'} | Y-axis: Time since departure
             {showRealtime && isToday && ' | Dashed lines: Real-time data'}
           </Typography>
 
           <Box sx={{ width: '100%', height: 500 }}>
             <ResponsiveContainer>
-              <LineChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
+              <LineChart data={chartData} margin={{ top: 20, right: 30, left: 60, bottom: xAxisMode === 'stop_sequence' ? 120 : 60 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis
-                  dataKey="stopSequence"
-                  label={{ value: 'Stop Sequence', position: 'bottom', offset: 40 }}
-                  tick={{ fontSize: 12 }}
+                  dataKey={xAxisMode === 'stop_sequence' ? 'stopSequence' : 'distanceTraveled'}
+                  label={{
+                    value: xAxisMode === 'stop_sequence' ? 'Stops' : 'Distance (km)',
+                    position: 'bottom',
+                    offset: xAxisMode === 'stop_sequence' ? 100 : 40
+                  }}
+                  tick={xAxisMode === 'stop_sequence'
+                    ? (props: { x: number, y: number, payload: { value: number } }) => {
+                        const point = chartData.find(p => p.stopSequence === props.payload.value)
+                        const name = point?.stopName || `Stop ${props.payload.value}`
+                        const displayName = name.length > 20 ? name.substring(0, 18) + '...' : name
+                        return (
+                          <g transform={`translate(${props.x},${props.y})`}>
+                            <text
+                              x={0}
+                              y={0}
+                              dy={8}
+                              textAnchor="end"
+                              fill="#666"
+                              fontSize={10}
+                              transform="rotate(-45)"
+                            >
+                              {displayName}
+                            </text>
+                          </g>
+                        )
+                      }
+                    : { fontSize: 12 }
+                  }
+                  tickFormatter={xAxisMode === 'distance_traveled'
+                    ? (value) => (value / 1000).toFixed(1)
+                    : undefined
+                  }
+                  interval={0}
                 />
                 <YAxis
                   tickFormatter={(value) => formatDuration(value)}
@@ -608,7 +733,7 @@ export default function TimeDistanceGraphTab({ routes, workerApi, agencies }: Ti
 
                 {chartTrips.map(({ trip, stopTimes }) => {
                   const tripKey = trip.trip_short_name || trip.trip_id
-                  const color = stringToColor(tripKey)
+                  const color = getColorForTrip(trip.trip_id)
                   const hasRealtime = showRealtime && isToday && stopTimes.some(st => st.realtime)
 
                   return (
