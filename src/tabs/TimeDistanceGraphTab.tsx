@@ -20,6 +20,8 @@ import {
 import {
   LineChart,
   Line,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -57,6 +59,14 @@ interface ChartDataPoint {
   stopName: string
   distanceTraveled?: number
   [key: string]: number | string | undefined // For trip data: tripId_theoretical, tripId_realtime
+}
+
+interface SpeedDataPoint {
+  segmentIndex: number
+  segmentLabel: string
+  fromStop: string
+  toStop: string
+  [key: string]: number | string | undefined // For trip data: tripId_theoretical_speed, tripId_realtime_speed
 }
 
 // Fixed color palette with 20 very distinct colors for trips
@@ -99,6 +109,12 @@ const formatDuration = (seconds: number): string => {
     return `${hours}h ${minutes.toString().padStart(2, '0')}m`
   }
   return `${minutes}m ${secs.toString().padStart(2, '0')}s`
+}
+
+// Format speed as km/h
+const formatSpeed = (speed: number): string => {
+  if (speed < 0 || !isFinite(speed)) return 'N/A'
+  return `${speed.toFixed(1)} km/h`
 }
 
 export default function TimeDistanceGraphTab({ routes, workerApi, agencies }: TimeDistanceGraphTabProps) {
@@ -405,6 +421,156 @@ export default function TimeDistanceGraphTab({ routes, workerApi, agencies }: Ti
 
   // Check if distance data is available
   const hasDistanceData = chartData.some(p => p.distanceTraveled !== undefined && p.distanceTraveled > 0)
+
+  // Build speed chart data - calculates speed between consecutive stops
+  const buildSpeedData = (): SpeedDataPoint[] => {
+    if (!hasDistanceData || chartTrips.length === 0) return []
+
+    const speedData: SpeedDataPoint[] = []
+
+    // Get sorted stop sequences from chart data (excluding the virtual "Departure" point at 0)
+    const stopSequences = chartData
+      .filter(p => p.stopSequence > 0)
+      .map(p => p.stopSequence)
+      .sort((a, b) => a - b)
+
+    // For each pair of consecutive stops, calculate speed
+    for (let i = 0; i < stopSequences.length - 1; i++) {
+      const fromSeq = stopSequences[i]
+      const toSeq = stopSequences[i + 1]
+
+      const fromPoint = chartData.find(p => p.stopSequence === fromSeq)
+      const toPoint = chartData.find(p => p.stopSequence === toSeq)
+
+      if (!fromPoint || !toPoint) continue
+      if (fromPoint.distanceTraveled === undefined || toPoint.distanceTraveled === undefined) continue
+
+      const distanceMeters = toPoint.distanceTraveled - fromPoint.distanceTraveled
+      if (distanceMeters <= 0) continue
+
+      const distanceKm = distanceMeters / 1000
+
+      const speedPoint: SpeedDataPoint = {
+        segmentIndex: i,
+        segmentLabel: `${fromSeq}→${toSeq}`,
+        fromStop: fromPoint.stopName,
+        toStop: toPoint.stopName
+      }
+
+      // Calculate speed for each trip
+      chartTrips.forEach(({ trip, stopTimes }) => {
+        const tripKey = trip.trip_short_name || trip.trip_id
+
+        // Find stop times for this segment
+        const fromStopTime = stopTimes.find(st => st.stop_sequence === fromSeq)
+        const toStopTime = stopTimes.find(st => st.stop_sequence === toSeq)
+
+        if (fromStopTime && toStopTime) {
+          // Theoretical speed: time from departure at fromStop to arrival at toStop
+          const departureSeconds = timeToSeconds(fromStopTime.departure_time)
+          const arrivalSeconds = timeToSeconds(toStopTime.arrival_time || toStopTime.departure_time)
+          const travelTimeSeconds = arrivalSeconds - departureSeconds
+
+          if (travelTimeSeconds > 0) {
+            const travelTimeHours = travelTimeSeconds / 3600
+            const theoreticalSpeed = distanceKm / travelTimeHours
+            speedPoint[`${tripKey}_theoretical`] = theoreticalSpeed
+          }
+
+          // Real-time speed (if available)
+          if (showRealtime && isToday && fromStopTime.realtime && toStopTime.realtime) {
+            let rtDepartureSeconds: number | null = null
+            let rtArrivalSeconds: number | null = null
+
+            const agencyTimezone = agencies.length > 0 && agencies[0].agency_timezone
+              ? agencies[0].agency_timezone
+              : Intl.DateTimeFormat().resolvedOptions().timeZone
+
+            // Get real-time departure from fromStop
+            if (fromStopTime.realtime.departure_time) {
+              const date = new Date(fromStopTime.realtime.departure_time * 1000)
+              const timeString = date.toLocaleString('en-US', {
+                timeZone: agencyTimezone,
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+              })
+              rtDepartureSeconds = timeToSeconds(timeString)
+            } else if (fromStopTime.realtime.departure_delay !== undefined) {
+              rtDepartureSeconds = timeToSeconds(fromStopTime.departure_time) + fromStopTime.realtime.departure_delay
+            }
+
+            // Get real-time arrival at toStop
+            if (toStopTime.realtime.arrival_time) {
+              const date = new Date(toStopTime.realtime.arrival_time * 1000)
+              const timeString = date.toLocaleString('en-US', {
+                timeZone: agencyTimezone,
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+              })
+              rtArrivalSeconds = timeToSeconds(timeString)
+            } else if (toStopTime.realtime.arrival_delay !== undefined) {
+              rtArrivalSeconds = timeToSeconds(toStopTime.arrival_time || toStopTime.departure_time) + toStopTime.realtime.arrival_delay
+            }
+
+            if (rtDepartureSeconds !== null && rtArrivalSeconds !== null) {
+              const rtTravelTimeSeconds = rtArrivalSeconds - rtDepartureSeconds
+              if (rtTravelTimeSeconds > 0) {
+                const rtTravelTimeHours = rtTravelTimeSeconds / 3600
+                const realtimeSpeed = distanceKm / rtTravelTimeHours
+                speedPoint[`${tripKey}_realtime`] = realtimeSpeed
+              }
+            }
+          }
+        }
+      })
+
+      speedData.push(speedPoint)
+    }
+
+    return speedData
+  }
+
+  const speedData = buildSpeedData()
+
+  // Custom tooltip for speed chart
+  const SpeedTooltip = ({ active, payload, label }: { active?: boolean, payload?: Array<{ name: string, value: number, color: string, dataKey: string }>, label?: string }) => {
+    if (!active || !payload || payload.length === 0) return null
+
+    const point = speedData.find(p => p.segmentLabel === label)
+
+    return (
+      <Paper sx={{ p: 1.5, maxWidth: 350 }}>
+        <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.5 }}>
+          {point?.fromStop}
+        </Typography>
+        <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1, display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <span style={{ color: '#666' }}>→</span> {point?.toStop}
+        </Typography>
+        {payload.map((entry, index) => {
+          const isRealtime = entry.name.includes('(RT)')
+          return (
+            <Box key={index} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+              <Box sx={{
+                width: 12,
+                height: 12,
+                backgroundColor: entry.color,
+                opacity: isRealtime ? 0.6 : 1,
+                border: isRealtime ? '2px dashed' : 'none',
+                borderColor: entry.color
+              }} />
+              <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
+                {entry.name}: {formatSpeed(entry.value)}
+              </Typography>
+            </Box>
+          )
+        })}
+      </Paper>
+    )
+  }
 
   // Custom tooltip
   const CustomTooltip = ({ active, payload, label }: { active?: boolean, payload?: Array<{ name: string, value: number, color: string }>, label?: number | string }) => {
@@ -769,6 +935,111 @@ export default function TimeDistanceGraphTab({ routes, workerApi, agencies }: Ti
             </ResponsiveContainer>
           </Box>
         </Paper>
+      )}
+
+      {/* Speed Chart - displayed when there's distance data */}
+      {chartData.length > 0 && chartTrips.length > 0 && speedData.length > 0 && (
+        <Paper sx={{ p: 2, mt: 3 }}>
+          <Typography variant="h6" gutterBottom>
+            Speed Between Stops
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Expected vehicle speed between consecutive stops (km/h)
+            {showRealtime && isToday && ' | Lighter bars: Real-time speed'}
+          </Typography>
+
+          <Box sx={{ width: '100%', height: 400 }}>
+            <ResponsiveContainer>
+              <BarChart data={speedData} margin={{ top: 20, right: 30, left: 60, bottom: 80 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="segmentLabel"
+                  label={{
+                    value: 'Segment (Stop → Stop)',
+                    position: 'bottom',
+                    offset: 60
+                  }}
+                  tick={(props: { x: number, y: number, payload: { value: string } }) => {
+                    const point = speedData.find(p => p.segmentLabel === props.payload.value)
+                    const fromName = point?.fromStop || ''
+                    const displayName = fromName.length > 15 ? fromName.substring(0, 13) + '...' : fromName
+                    return (
+                      <g transform={`translate(${props.x},${props.y})`}>
+                        <text
+                          x={0}
+                          y={0}
+                          dy={8}
+                          textAnchor="end"
+                          fill="#666"
+                          fontSize={9}
+                          transform="rotate(-45)"
+                        >
+                          {displayName}
+                        </text>
+                      </g>
+                    )
+                  }}
+                  interval={0}
+                />
+                <YAxis
+                  tickFormatter={(value) => `${value.toFixed(0)}`}
+                  label={{ value: 'Speed (km/h)', angle: -90, position: 'insideLeft', offset: 10 }}
+                  tick={{ fontSize: 11 }}
+                />
+                <Tooltip content={<SpeedTooltip />} />
+                <Legend
+                  wrapperStyle={{ paddingTop: 20 }}
+                  formatter={(value) => {
+                    const isRealtime = value.includes('(RT)')
+                    return (
+                      <span style={{
+                        fontWeight: isRealtime ? 'normal' : 'bold',
+                        fontStyle: isRealtime ? 'italic' : 'normal'
+                      }}>
+                        {value}
+                      </span>
+                    )
+                  }}
+                />
+
+                {chartTrips.map(({ trip, stopTimes }) => {
+                  const tripKey = trip.trip_short_name || trip.trip_id
+                  const color = getColorForTrip(trip.trip_id)
+                  const hasRealtime = showRealtime && isToday && stopTimes.some(st => st.realtime)
+
+                  return (
+                    <React.Fragment key={trip.trip_id}>
+                      {/* Theoretical speed bar */}
+                      <Bar
+                        dataKey={`${tripKey}_theoretical`}
+                        name={tripKey}
+                        fill={color}
+                        opacity={0.9}
+                      />
+
+                      {/* Realtime speed bar (if available) */}
+                      {hasRealtime && (
+                        <Bar
+                          dataKey={`${tripKey}_realtime`}
+                          name={`${tripKey} (RT)`}
+                          fill={color}
+                          opacity={0.5}
+                        />
+                      )}
+                    </React.Fragment>
+                  )
+                })}
+              </BarChart>
+            </ResponsiveContainer>
+          </Box>
+        </Paper>
+      )}
+
+      {/* Info when no distance data available for speed chart */}
+      {chartData.length > 0 && chartTrips.length > 0 && !hasDistanceData && (
+        <Alert severity="info" sx={{ mt: 3 }}>
+          Speed chart is not available because the GTFS feed does not include distance data (shape_dist_traveled).
+        </Alert>
       )}
 
       {/* Empty state */}
