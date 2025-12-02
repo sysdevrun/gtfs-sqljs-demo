@@ -842,6 +842,8 @@ export default function TimeDistanceGraphTab({ routes, workerApi, agencies }: Ti
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis
                   dataKey={xAxisMode === 'stop_sequence' ? 'stopSequence' : 'distanceTraveled'}
+                  type={xAxisMode === 'distance_traveled' ? 'number' : 'category'}
+                  domain={xAxisMode === 'distance_traveled' ? [0, 'dataMax'] : undefined}
                   label={{
                     value: xAxisMode === 'stop_sequence' ? 'Stops' : 'Distance (km)',
                     position: 'bottom',
@@ -874,7 +876,7 @@ export default function TimeDistanceGraphTab({ routes, workerApi, agencies }: Ti
                     ? (value) => (value / 1000).toFixed(1)
                     : undefined
                   }
-                  interval={0}
+                  interval={xAxisMode === 'stop_sequence' ? 0 : undefined}
                 />
                 <YAxis
                   tickFormatter={(value) => formatDuration(value)}
