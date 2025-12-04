@@ -198,10 +198,33 @@ export default function TimetablesTab({ routes, workerApi, agencies, vehicles }:
       return `${h}:${m}`
     }
 
-    // If we have a delay, apply it to the scheduled time
+    // If we have a departure delay, apply it to the scheduled time
     if (stopTime.realtime.departure_delay !== undefined) {
       const scheduledSeconds = timeToSeconds(stopTime.departure_time)
       const realtimeSeconds = scheduledSeconds + stopTime.realtime.departure_delay
+      const h = Math.floor(realtimeSeconds / 3600) % 24
+      const m = Math.floor((realtimeSeconds % 3600) / 60)
+      return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
+    }
+
+    // Fallback to arrival time if departure is not available
+    if (stopTime.realtime.arrival_time) {
+      const date = new Date(stopTime.realtime.arrival_time * 1000)
+      const timeString = date.toLocaleString('en-US', {
+        timeZone: agencyTimezone,
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      })
+      const [h, m] = timeString.split(':')
+      return `${h}:${m}`
+    }
+
+    // Fallback to arrival delay if departure delay is not available
+    if (stopTime.realtime.arrival_delay !== undefined && stopTime.arrival_time) {
+      const scheduledSeconds = timeToSeconds(stopTime.arrival_time)
+      const realtimeSeconds = scheduledSeconds + stopTime.realtime.arrival_delay
       const h = Math.floor(realtimeSeconds / 3600) % 24
       const m = Math.floor((realtimeSeconds % 3600) / 60)
       return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
