@@ -49,7 +49,7 @@ export default function VehiclesTable({ vehicles, getRouteById, gtfs, realtimeLa
           }
           // Otherwise compute from arrival timestamp
           if (st.realtime.arrival_time !== undefined) {
-            return computeDelayFromTimestamp(st.arrival_time, st.realtime.arrival_time, agencyTimezone)
+            return st.arrival_time ? computeDelayFromTimestamp(st.arrival_time, st.realtime.arrival_time, agencyTimezone) : undefined
           }
           // Fallback to departure delay
           if (st.realtime.departure_delay !== undefined) {
@@ -57,7 +57,7 @@ export default function VehiclesTable({ vehicles, getRouteById, gtfs, realtimeLa
           }
           // Or compute from departure timestamp
           if (st.realtime.departure_time !== undefined) {
-            return computeDelayFromTimestamp(st.departure_time, st.realtime.departure_time, agencyTimezone)
+            return st.departure_time ? computeDelayFromTimestamp(st.departure_time, st.realtime.departure_time, agencyTimezone) : undefined
           }
         }
       }

@@ -189,10 +189,10 @@ export default function StopTimesTable({ stopTimes, gtfs, selectedTrip, vehicles
                     </div>
                   </td>
                   <td className="py-3 px-4 text-sm text-gray-700">
-                    {formatTimeWithRealtime(st.arrival_time, st.realtime?.arrival_delay, st.realtime?.arrival_time)}
+                    {st.arrival_time ? formatTimeWithRealtime(st.arrival_time, st.realtime?.arrival_delay, st.realtime?.arrival_time) : '—'}
                   </td>
                   <td className="py-3 px-4 text-sm text-gray-700">
-                    {formatTimeWithRealtime(st.departure_time, st.realtime?.departure_delay, st.realtime?.departure_time)}
+                    {st.departure_time ? formatTimeWithRealtime(st.departure_time, st.realtime?.departure_delay, st.realtime?.departure_time) : '—'}
                   </td>
                 </tr>
               )

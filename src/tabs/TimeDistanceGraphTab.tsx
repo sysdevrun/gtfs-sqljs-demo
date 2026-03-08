@@ -350,10 +350,14 @@ export default function TimeDistanceGraphTab({ routes, workerApi, agencies }: Ti
         if (stopTime) {
           // Get first departure time for this trip
           const firstStopTime = stopTimes[0]
-          const firstDepartureSeconds = timeToSeconds(firstStopTime.departure_time)
+          const firstDepartureTime = firstStopTime.departure_time || firstStopTime.arrival_time
+          if (!firstDepartureTime) return
+          const firstDepartureSeconds = timeToSeconds(firstDepartureTime)
 
           // Theoretical time (seconds since departure)
-          const arrivalSeconds = timeToSeconds(stopTime.arrival_time || stopTime.departure_time)
+          const timeAtStop = stopTime.arrival_time || stopTime.departure_time
+          if (!timeAtStop) return
+          const arrivalSeconds = timeToSeconds(timeAtStop)
           const theoreticalSeconds = Math.max(0, arrivalSeconds - firstDepartureSeconds)
           point[`${tripKey}_theoretical`] = theoreticalSeconds
 
@@ -379,7 +383,7 @@ export default function TimeDistanceGraphTab({ routes, workerApi, agencies }: Ti
               realtimeArrivalSeconds = timeToSeconds(timeString)
             } else if (stopTime.realtime.arrival_delay !== undefined) {
               // Apply delay to theoretical arrival
-              const theoreticalArrival = timeToSeconds(stopTime.arrival_time || stopTime.departure_time)
+              const theoreticalArrival = timeToSeconds(timeAtStop)
               realtimeArrivalSeconds = theoreticalArrival + stopTime.realtime.arrival_delay
             }
 
@@ -467,8 +471,11 @@ export default function TimeDistanceGraphTab({ routes, workerApi, agencies }: Ti
 
         if (fromStopTime && toStopTime) {
           // Theoretical speed: time from departure at fromStop to arrival at toStop
-          const departureSeconds = timeToSeconds(fromStopTime.departure_time)
-          const arrivalSeconds = timeToSeconds(toStopTime.arrival_time || toStopTime.departure_time)
+          const fromDepartureTime = fromStopTime.departure_time || fromStopTime.arrival_time
+          const toArrivalTime = toStopTime.arrival_time || toStopTime.departure_time
+          if (!fromDepartureTime || !toArrivalTime) return
+          const departureSeconds = timeToSeconds(fromDepartureTime)
+          const arrivalSeconds = timeToSeconds(toArrivalTime)
           const travelTimeSeconds = arrivalSeconds - departureSeconds
 
           if (travelTimeSeconds > 0) {
@@ -497,8 +504,8 @@ export default function TimeDistanceGraphTab({ routes, workerApi, agencies }: Ti
                 second: '2-digit'
               })
               rtDepartureSeconds = timeToSeconds(timeString)
-            } else if (fromStopTime.realtime.departure_delay !== undefined) {
-              rtDepartureSeconds = timeToSeconds(fromStopTime.departure_time) + fromStopTime.realtime.departure_delay
+            } else if (fromStopTime.realtime.departure_delay !== undefined && fromDepartureTime) {
+              rtDepartureSeconds = timeToSeconds(fromDepartureTime) + fromStopTime.realtime.departure_delay
             }
 
             // Get real-time arrival at toStop
@@ -512,8 +519,8 @@ export default function TimeDistanceGraphTab({ routes, workerApi, agencies }: Ti
                 second: '2-digit'
               })
               rtArrivalSeconds = timeToSeconds(timeString)
-            } else if (toStopTime.realtime.arrival_delay !== undefined) {
-              rtArrivalSeconds = timeToSeconds(toStopTime.arrival_time || toStopTime.departure_time) + toStopTime.realtime.arrival_delay
+            } else if (toStopTime.realtime.arrival_delay !== undefined && toArrivalTime) {
+              rtArrivalSeconds = timeToSeconds(toArrivalTime) + toStopTime.realtime.arrival_delay
             }
 
             if (rtDepartureSeconds !== null && rtArrivalSeconds !== null) {

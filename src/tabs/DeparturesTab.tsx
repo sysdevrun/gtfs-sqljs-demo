@@ -270,6 +270,7 @@ export default function DeparturesTab({
           }
 
           // Parse scheduled departure time
+          if (!stopTime.departure_time) continue
           const [h, m, s] = stopTime.departure_time.split(':').map(Number)
           const departureTimeSeconds = h * 3600 + m * 60 + s
 

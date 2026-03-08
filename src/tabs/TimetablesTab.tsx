@@ -170,7 +170,7 @@ export default function TimetablesTab({ routes, workerApi, agencies, vehicles }:
     loadTimetable()
   }, [workerApi, selectedDirection])
 
-  const formatTime = (timeStr: string): string => {
+  const formatTime = (timeStr: string | undefined): string => {
     if (!timeStr) return ''
     const [h, m] = timeStr.split(':')
     const hours = (parseInt(h, 10) % 24).toString().padStart(2, '0')  // Use modulo 24 for times >= 24h
@@ -199,7 +199,7 @@ export default function TimetablesTab({ routes, workerApi, agencies, vehicles }:
     }
 
     // If we have a departure delay, apply it to the scheduled time
-    if (stopTime.realtime.departure_delay !== undefined) {
+    if (stopTime.realtime.departure_delay !== undefined && stopTime.departure_time) {
       const scheduledSeconds = timeToSeconds(stopTime.departure_time)
       const realtimeSeconds = scheduledSeconds + stopTime.realtime.departure_delay
       const h = Math.floor(realtimeSeconds / 3600) % 24
@@ -496,7 +496,7 @@ export default function TimetablesTab({ routes, workerApi, agencies, vehicles }:
                               )
                             }
 
-                            const scheduledTime = formatTime(stopTime.departure_time)
+                            const scheduledTime = formatTime(stopTime.departure_time || stopTime.arrival_time)
                             const realtimeTime = isToday() ? getRealtimeDepartureTime(stopTime) : null
                             const vehicleStatus = getVehicleStatus(tt.trip.trip_id, stopTime.stop_id)
                             const vehicleProgress = calculateVehicleProgress(tt.trip.trip_id, stopTime.stop_id, tt.stopTimes)

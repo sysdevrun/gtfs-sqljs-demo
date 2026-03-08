@@ -158,7 +158,9 @@ function calculateLastStop(
     const stopName = stops.length > 0 ? stops[0].stop_name : lastStopTime.stop_id
 
     // Parse scheduled arrival time (format: "HH:MM:SS")
-    const scheduledArrival = lastStopTime.arrival_time.substring(0, 5) // Get HH:MM
+    const arrivalTimeStr = lastStopTime.arrival_time || lastStopTime.departure_time
+    if (!arrivalTimeStr) return null
+    const scheduledArrival = arrivalTimeStr.substring(0, 5) // Get HH:MM
 
     // Get realtime arrival if available
     let realtimeArrival: string | null = null
@@ -173,7 +175,7 @@ function calculateLastStop(
 
       // Calculate delay in seconds
       // Parse scheduled time to seconds from midnight
-      const [schedHours, schedMinutes, schedSeconds] = lastStopTime.arrival_time.split(':').map(Number)
+      const [schedHours, schedMinutes, schedSeconds] = arrivalTimeStr.split(':').map(Number)
       const scheduledSeconds = schedHours * 3600 + schedMinutes * 60 + (schedSeconds || 0)
 
       // Get realtime seconds from midnight
