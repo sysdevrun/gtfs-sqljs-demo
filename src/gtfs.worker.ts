@@ -52,6 +52,7 @@ export interface ExtendedStopTimeFilters extends Omit<StopTimeFilters, 'serviceI
 export interface GtfsWorkerAPI {
   // Lifecycle methods
   loadGtfs: (gtfsUrl: string, gtfsRtUrls: string[], onProgress: (progress: ProgressInfo) => void) => Promise<void>
+  loadGtfsFromData: (data: ArrayBuffer, gtfsRtUrls: string[], onProgress: (progress: ProgressInfo) => void) => Promise<void>
   clearData: () => Promise<void>
 
   // Query methods - matching gtfs-sqljs interface
@@ -117,6 +118,44 @@ class GtfsWorker implements GtfsWorkerAPI {
       })
 
       // Fetch initial realtime data
+      if (gtfsRtUrls.length > 0) {
+        await this.gtfs.fetchRealtimeData()
+      }
+    } catch (error) {
+      throw new Error(`Failed to load GTFS: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
+  async loadGtfsFromData(
+    data: ArrayBuffer,
+    gtfsRtUrls: string[],
+    onProgress: (progress: ProgressInfo) => void
+  ): Promise<void> {
+    try {
+      if (this.gtfs) {
+        await this.clearData()
+      }
+
+      const adapter = await createSqlJsAdapter({
+        locateFile: (filename: string) => {
+          if (filename.endsWith('.wasm')) {
+            const base = import.meta.env.BASE_URL || '/'
+            return new URL(filename, new URL(base, self.location.origin)).href
+          }
+          return filename
+        }
+      })
+
+      this.gtfs = await GtfsSqlJs.fromZipData(data, {
+        adapter,
+        realtimeFeedUrls: gtfsRtUrls,
+        stalenessThreshold: 120,
+        skipFiles: ['fare_attributes.txt'],
+        onProgress: (progress) => {
+          onProgress(progress as ProgressInfo)
+        }
+      })
+
       if (gtfsRtUrls.length > 0) {
         await this.gtfs.fetchRealtimeData()
       }

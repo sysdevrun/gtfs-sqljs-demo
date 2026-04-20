@@ -1,0 +1,57 @@
+.rgs-selector {
+  font-family: "Roboto", "Helvetica", "Arial", sans-serif;
+  max-width: none;
+  margin: 0;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 4px;
+  color: rgba(0, 0, 0, 0.87);
+}
+
+.rgs-selector__tabs {
+  background: #fafafa;
+  border-bottom-color: rgba(0, 0, 0, 0.12);
+  border-radius: 4px 4px 0 0;
+}
+
+.rgs-selector__tab {
+  text-transform: uppercase;
+  letter-spacing: 0.02857em;
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.rgs-selector__tab:hover {
+  color: #d32f2f;
+}
+
+.rgs-selector__tab--active {
+  color: #d32f2f;
+  border-bottom-color: #d32f2f;
+}
+
+.rgs-dropzone--active {
+  border-color: #d32f2f;
+  background: rgba(211, 47, 47, 0.08);
+}
+
+.rgs-url-input input:focus,
+.rgs-source-search__input:focus {
+  border-color: #d32f2f;
+  box-shadow: 0 0 0 2px rgba(211, 47, 47, 0.2);
+}
+
+.rgs-url-input button {
+  background: #d32f2f;
+  text-transform: uppercase;
+  letter-spacing: 0.02857em;
+  font-weight: 500;
+}
+
+.rgs-url-input button:hover {
+  background: #9a0007;
+}
+
+.rgs-source-search__item:hover,
+.rgs-source-search__item--active {
+  background: rgba(211, 47, 47, 0.08);
+}

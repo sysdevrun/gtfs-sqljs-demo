@@ -220,14 +220,36 @@ function App() {
     saveConfig({ selectedTab: newValue })
   }
 
-  // Load GTFS data
-  const loadGtfs = useCallback(async (gtfsUrl: string, gtfsRtUrls: string[]) => {
+  // Shared post-load step: populates state from the just-loaded worker.
+  const hydrateFromWorker = useCallback(async () => {
+    if (!workerRef.current) return
+    const agenciesData = await workerRef.current.getAgencies()
+    console.log('Loaded agencies:', agenciesData.map(a => a.agency_name).join(', '))
+    setAgencies(agenciesData)
+
+    const routesData = await workerRef.current.getRoutes()
+    console.log(`Loaded ${routesData.length} routes`)
+    const sortedRoutes = routesData.sort((a: Route, b: Route) => {
+      const aSort = a.route_sort_order ?? 9999
+      const bSort = b.route_sort_order ?? 9999
+      return aSort - bSort
+    })
+    setRoutes(sortedRoutes)
+
+    const stopsData = await workerRef.current.getStops()
+    console.log(`Loaded ${stopsData.length} stops`)
+    setStops(stopsData)
+    if (gtfsApiRef.current) {
+      gtfsApiRef.current.setStops(stopsData)
+    }
+  }, [])
+
+  const resetForLoad = useCallback(() => {
     setLoading(true)
     setLoadingProgress(null)
     setError(null)
     setGtfsLoaded(false)
 
-    // Clear existing data
     setAgencies([])
     setRoutes([])
     setStops([])
@@ -239,11 +261,56 @@ function App() {
     setSelectedRoute(null)
     setSelectedTrip(null)
 
-    // Deregister old worker and register new one
     console.log('Reinitializing worker for new GTFS data...')
     initializeWorker()
+  }, [initializeWorker])
 
-    // Ensure the new worker is ready
+  // Load GTFS data from a Blob (file upload)
+  const loadGtfsFromBlob = useCallback(async (blob: Blob, fileName: string, gtfsRtUrls: string[]) => {
+    resetForLoad()
+
+    if (!workerRef.current) {
+      setError('Failed to initialize worker')
+      setLoading(false)
+      return
+    }
+
+    try {
+      const proxiedRtUrls = gtfsRtUrls
+        .filter(url => url.trim() !== '')
+        .map(url => proxyUrl(url))
+
+      console.log('Loading GTFS from uploaded file:', fileName, `${blob.size} bytes`)
+      console.log('Loading GTFS-RT from:', proxiedRtUrls)
+
+      const buffer = await blob.arrayBuffer()
+
+      await workerRef.current.loadGtfsFromData(
+        buffer,
+        proxiedRtUrls,
+        proxy((progress: ProgressInfo) => {
+          setLoadingProgress(progress)
+        })
+      )
+
+      await hydrateFromWorker()
+      await updateRealtimeData()
+
+      setGtfsLoaded(true)
+      setLoading(false)
+      setLoadingProgress(null)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load GTFS data')
+      setLoading(false)
+      setLoadingProgress(null)
+      setGtfsLoaded(false)
+    }
+  }, [resetForLoad, hydrateFromWorker])
+
+  // Load GTFS data
+  const loadGtfs = useCallback(async (gtfsUrl: string, gtfsRtUrls: string[]) => {
+    resetForLoad()
+
     if (!workerRef.current) {
       setError('Failed to initialize worker')
       setLoading(false)
@@ -268,29 +335,7 @@ function App() {
         })
       )
 
-      // Fetch data from worker
-      const agenciesData = await workerRef.current.getAgencies()
-      console.log('Loaded agencies:', agenciesData.map(a => a.agency_name).join(', '))
-      setAgencies(agenciesData)
-
-      const routesData = await workerRef.current.getRoutes()
-      console.log(`Loaded ${routesData.length} routes`)
-      const sortedRoutes = routesData.sort((a: Route, b: Route) => {
-        const aSort = a.route_sort_order ?? 9999
-        const bSort = b.route_sort_order ?? 9999
-        return aSort - bSort
-      })
-      setRoutes(sortedRoutes)
-
-      // Fetch stops and update API adapter cache
-      const stopsData = await workerRef.current.getStops()
-      console.log(`Loaded ${stopsData.length} stops`)
-      setStops(stopsData)
-      if (gtfsApiRef.current) {
-        gtfsApiRef.current.setStops(stopsData)
-      }
-
-      // Update realtime data
+      await hydrateFromWorker()
       await updateRealtimeData()
 
       setGtfsLoaded(true)
@@ -302,7 +347,7 @@ function App() {
       setLoadingProgress(null)
       setGtfsLoaded(false)
     }
-  }, [initializeWorker])
+  }, [resetForLoad, hydrateFromWorker])
 
   const updateRealtimeData = useCallback(async () => {
     if (!workerRef.current || !gtfsLoaded || !gtfsApiRef.current) return
@@ -593,6 +638,7 @@ function App() {
                 loading={loading}
                 error={error}
                 loadGtfs={loadGtfs}
+                loadGtfsFromBlob={loadGtfsFromBlob}
                 downloadDatabase={downloadDatabase}
                 gtfsLoaded={gtfsLoaded}
                 agencies={agencies}

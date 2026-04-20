@@ -1,5 +1,14 @@
 import { Box, TextField, Button, Typography, Paper, Stack, Grid, Divider, Chip } from '@mui/material'
 import { useState, useEffect } from 'react'
+import {
+  GtfsSelector,
+  fileTab,
+  urlTab,
+  transportDataGouvFr,
+  mobilityDataCsv,
+} from 'react-gtfs-selector'
+import 'react-gtfs-selector/style.css'
+import '../react-gtfs-selector-overrides.css'
 import { AppConfig, saveConfig } from '../utils/configStorage'
 import { Agency, Alert, VehiclePosition, TripUpdate } from 'gtfs-sqljs'
 
@@ -16,6 +25,7 @@ interface ConfigurationTabProps {
   loading: boolean
   error: string | null
   loadGtfs: (gtfsUrl: string, gtfsRtUrls: string[]) => void
+  loadGtfsFromBlob: (blob: Blob, fileName: string, gtfsRtUrls: string[]) => void
   downloadDatabase: () => void
   gtfsLoaded: boolean
   agencies: Agency[]
@@ -32,6 +42,7 @@ export default function ConfigurationTab({
   loading,
   error,
   loadGtfs,
+  loadGtfsFromBlob,
   downloadDatabase,
   gtfsLoaded,
   agencies,
@@ -127,6 +138,32 @@ export default function ConfigurationTab({
             Car Jaune (1er déc.)
           </Button>
         </Stack>
+      </Paper>
+
+      <Paper sx={{ p: 3, mb: 3 }}>
+        <Typography variant="h6" gutterBottom>
+          Browse or Upload GTFS
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Search transport.data.gouv.fr or MobilityData, paste a GTFS URL, or drop a ZIP file.
+        </Typography>
+        <GtfsSelector
+          tabs={[
+            transportDataGouvFr,
+            mobilityDataCsv,
+            urlTab,
+            fileTab,
+          ]}
+          onSelect={(result) => {
+            if (result.type === 'file') {
+              loadGtfsFromBlob(result.blob, result.fileName, [])
+              return
+            }
+            const rtUrls = result.gtfsRtUrls ?? []
+            updateConfig({ gtfsUrl: result.url, gtfsRtUrls: rtUrls })
+            loadGtfs(result.url, rtUrls)
+          }}
+        />
       </Paper>
 
       <Paper sx={{ p: 3, mb: 3 }}>
