@@ -107,7 +107,7 @@ gtfs-sqljs-demo/
 
 ### Core Library: gtfs-sqljs
 
-**Package:** `github:sysdevrun/gtfs-sqljs#7cfd31560795daa6e77c04561363d601feba8c94`
+**Package:** `gtfs-sqljs` (npm)
 
 **Key Features:**
 - Downloads and extracts GTFS ZIP files

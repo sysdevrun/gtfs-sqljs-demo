@@ -447,11 +447,7 @@ function App() {
         return
       }
 
-      const arrayBuffer = new ArrayBuffer(dbBuffer.byteLength)
-      const uint8View = new Uint8Array(arrayBuffer)
-      uint8View.set(new Uint8Array(dbBuffer.buffer, dbBuffer.byteOffset, dbBuffer.byteLength))
-
-      const blob = new Blob([arrayBuffer], { type: 'application/x-sqlite3' })
+      const blob = new Blob([dbBuffer], { type: 'application/x-sqlite3' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url

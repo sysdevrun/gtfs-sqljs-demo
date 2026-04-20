@@ -22,6 +22,7 @@ import {
   ShapeFilters,
   GeoJsonFeatureCollection
 } from 'gtfs-sqljs'
+import { createSqlJsAdapter } from 'gtfs-sqljs/adapters/sql-js'
 
 export interface ProgressInfo {
   phase: 'checking_cache' | 'loading_from_cache' | 'downloading' | 'extracting' | 'creating_schema' | 'inserting_data' | 'creating_indexes' | 'analyzing' | 'loading_realtime' | 'saving_cache' | 'complete'
@@ -54,29 +55,29 @@ export interface GtfsWorkerAPI {
   clearData: () => Promise<void>
 
   // Query methods - matching gtfs-sqljs interface
-  getAgencies: (filters?: AgencyFilters) => Agency[]
-  getRoutes: (filters?: RouteFilters) => Route[]
-  getTrips: (filters?: ExtendedTripFilters) => Trip[]
-  getStops: (filters?: StopFilters) => Stop[]
-  getStopTimes: (filters?: ExtendedStopTimeFilters) => StopTimeWithRealtime[]
-  getStopTimeUpdates: (filters?: StopTimeUpdateFilters) => StopTimeUpdate[]
-  getAlerts: (filters?: AlertFilters) => Alert[]
-  getVehiclePositions: (filters?: VehiclePositionFilters) => VehiclePosition[]
-  getTripUpdates: (filters?: TripUpdateFilters) => TripUpdate[]
+  getAgencies: (filters?: AgencyFilters) => Promise<Agency[]>
+  getRoutes: (filters?: RouteFilters) => Promise<Route[]>
+  getTrips: (filters?: ExtendedTripFilters) => Promise<Trip[]>
+  getStops: (filters?: StopFilters) => Promise<Stop[]>
+  getStopTimes: (filters?: ExtendedStopTimeFilters) => Promise<StopTimeWithRealtime[]>
+  getStopTimeUpdates: (filters?: StopTimeUpdateFilters) => Promise<StopTimeUpdate[]>
+  getAlerts: (filters?: AlertFilters) => Promise<Alert[]>
+  getVehiclePositions: (filters?: VehiclePositionFilters) => Promise<VehiclePosition[]>
+  getTripUpdates: (filters?: TripUpdateFilters) => Promise<TripUpdate[]>
 
   // Realtime methods
   fetchRealtimeData: () => Promise<void>
-  getActiveServiceIds: (date: string) => string[]
+  getActiveServiceIds: (date: string) => Promise<string[]>
   getLastRealtimeFetchTimestamp: () => number | null
 
   // Database methods
-  getDatabase: () => Uint8Array | null
+  getDatabase: () => Promise<ArrayBuffer | null>
 
   // Stop list methods
-  buildOrderedStopList: (tripIds: string[]) => Stop[]
+  buildOrderedStopList: (tripIds: string[]) => Promise<Stop[]>
 
   // Shape methods
-  getShapesToGeojson: (filters?: ShapeFilters, precision?: number) => GeoJsonFeatureCollection
+  getShapesToGeojson: (filters?: ShapeFilters, precision?: number) => Promise<GeoJsonFeatureCollection>
 }
 
 class GtfsWorker implements GtfsWorkerAPI {
@@ -93,10 +94,7 @@ class GtfsWorker implements GtfsWorkerAPI {
         await this.clearData()
       }
 
-      this.gtfs = await GtfsSqlJs.fromZip(gtfsUrl, {
-        realtimeFeedUrls: gtfsRtUrls,
-        stalenessThreshold: 120,
-        skipFiles: ['fare_attributes.txt'],
+      const adapter = await createSqlJsAdapter({
         locateFile: (filename: string) => {
           if (filename.endsWith('.wasm')) {
             // WASM files are at the base path, not relative to worker location
@@ -104,7 +102,14 @@ class GtfsWorker implements GtfsWorkerAPI {
             return new URL(filename, new URL(base, self.location.origin)).href
           }
           return filename
-        },
+        }
+      })
+
+      this.gtfs = await GtfsSqlJs.fromZip(gtfsUrl, {
+        adapter,
+        realtimeFeedUrls: gtfsRtUrls,
+        stalenessThreshold: 120,
+        skipFiles: ['fare_attributes.txt'],
         onProgress: (progress) => {
           // Forward progress to main thread
           onProgress(progress as ProgressInfo)
@@ -122,99 +127,95 @@ class GtfsWorker implements GtfsWorkerAPI {
 
   async clearData(): Promise<void> {
     if (this.gtfs) {
-      // Close the database connection if possible
-      const db = this.gtfs.getDatabase()
-      if (db && typeof db.close === 'function') {
-        db.close()
-      }
+      await this.gtfs.close()
       this.gtfs = null
     }
   }
 
-  getAgencies(filters?: AgencyFilters): Agency[] {
+  async getAgencies(filters?: AgencyFilters): Promise<Agency[]> {
     if (!this.gtfs) {
       throw new Error('GTFS not loaded')
     }
-    return this.gtfs.getAgencies(filters)
+    return await this.gtfs.getAgencies(filters)
   }
 
-  getRoutes(filters?: RouteFilters): Route[] {
+  async getRoutes(filters?: RouteFilters): Promise<Route[]> {
     if (!this.gtfs) {
       throw new Error('GTFS not loaded')
     }
-    return this.gtfs.getRoutes(filters)
+    return await this.gtfs.getRoutes(filters)
   }
 
-  getTrips(filters?: ExtendedTripFilters): Trip[] {
+  async getTrips(filters?: ExtendedTripFilters): Promise<Trip[]> {
     if (!this.gtfs) {
       throw new Error('GTFS not loaded')
     }
 
     // Convert date to serviceIds if provided
     if (filters?.date && !filters.serviceIds) {
-      const serviceIds = this.gtfs.getActiveServiceIds(filters.date)
+      const serviceIds = await this.gtfs.getActiveServiceIds(filters.date)
       const { date, ...restFilters } = filters
-      return this.gtfs.getTrips({ ...restFilters, serviceIds })
+      return await this.gtfs.getTrips({ ...restFilters, serviceIds })
     }
 
-    return this.gtfs.getTrips(filters)
+    return await this.gtfs.getTrips(filters)
   }
 
-  getStopTimes(filters?: ExtendedStopTimeFilters): StopTimeWithRealtime[] {
+  async getStopTimes(filters?: ExtendedStopTimeFilters): Promise<StopTimeWithRealtime[]> {
     if (!this.gtfs) {
       throw new Error('GTFS not loaded')
     }
 
     // Convert date to serviceIds if provided
     if (filters?.date && !filters.serviceIds) {
-      const serviceIds = this.gtfs.getActiveServiceIds(filters.date)
+      const serviceIds = await this.gtfs.getActiveServiceIds(filters.date)
       const { date, ...restFilters } = filters
-      return this.gtfs.getStopTimes({ ...restFilters, serviceIds }) as StopTimeWithRealtime[]
+      return await this.gtfs.getStopTimes({ ...restFilters, serviceIds }) as StopTimeWithRealtime[]
     }
 
-    return this.gtfs.getStopTimes(filters) as StopTimeWithRealtime[]
+    return await this.gtfs.getStopTimes(filters) as StopTimeWithRealtime[]
   }
 
-  getStopTimeUpdates(filters?: StopTimeUpdateFilters): StopTimeUpdate[] {
+  async getStopTimeUpdates(filters?: StopTimeUpdateFilters): Promise<StopTimeUpdate[]> {
     if (!this.gtfs) {
       throw new Error('GTFS not loaded')
     }
-    return this.gtfs.getStopTimeUpdates(filters)
+    return await this.gtfs.getStopTimeUpdates(filters)
   }
 
-  getStops(filters?: StopFilters): Stop[] {
+  async getStops(filters?: StopFilters): Promise<Stop[]> {
     if (!this.gtfs) {
       throw new Error('GTFS not loaded')
     }
-    return this.gtfs.getStops(filters)
+    return await this.gtfs.getStops(filters)
   }
 
-  getAlerts(filters?: AlertFilters): Alert[] {
+  async getAlerts(filters?: AlertFilters): Promise<Alert[]> {
     if (!this.gtfs) {
       throw new Error('GTFS not loaded')
     }
-    return this.gtfs.getAlerts(filters)
+    return await this.gtfs.getAlerts(filters)
   }
 
-  getVehiclePositions(filters?: VehiclePositionFilters): VehiclePosition[] {
+  async getVehiclePositions(filters?: VehiclePositionFilters): Promise<VehiclePosition[]> {
     if (!this.gtfs) {
       throw new Error('GTFS not loaded')
     }
-    return this.gtfs.getVehiclePositions(filters)
+    return await this.gtfs.getVehiclePositions(filters)
   }
 
-  getTripUpdates(filters?: TripUpdateFilters): TripUpdate[] {
+  async getTripUpdates(filters?: TripUpdateFilters): Promise<TripUpdate[]> {
     if (!this.gtfs) {
       throw new Error('GTFS not loaded')
     }
-    return this.gtfs.getTripUpdates(filters)
+    return await this.gtfs.getTripUpdates(filters)
   }
 
-  getActiveServiceIds(date: string): string[] {
+  async getActiveServiceIds(date: string): Promise<string[]> {
     if (!this.gtfs) {
       throw new Error('GTFS not loaded')
     }
-    return this.gtfs.getActiveServiceIds(date)
+    return await this.gtfs.getActiveServiceIds(date)
   }
 
   async fetchRealtimeData(): Promise<void> {
@@ -231,26 +232,25 @@ class GtfsWorker implements GtfsWorkerAPI {
     return this.gtfs.getLastRealtimeFetchTimestamp()
   }
 
-  getDatabase(): Uint8Array | null {
+  async getDatabase(): Promise<ArrayBuffer | null> {
     if (!this.gtfs) {
       return null
     }
-    const db = this.gtfs.getDatabase()
-    return db.export()
+    return await this.gtfs.export()
   }
 
-  buildOrderedStopList(tripIds: string[]): Stop[] {
+  async buildOrderedStopList(tripIds: string[]): Promise<Stop[]> {
     if (!this.gtfs) {
       throw new Error('GTFS not loaded')
     }
-    return this.gtfs.buildOrderedStopList(tripIds)
+    return await this.gtfs.buildOrderedStopList(tripIds)
   }
 
-  getShapesToGeojson(filters?: ShapeFilters, precision?: number): GeoJsonFeatureCollection {
+  async getShapesToGeojson(filters?: ShapeFilters, precision?: number): Promise<GeoJsonFeatureCollection> {
     if (!this.gtfs) {
       throw new Error('GTFS not loaded')
     }
-    return this.gtfs.getShapesToGeojson(filters, precision)
+    return await this.gtfs.getShapesToGeojson(filters, precision)
   }
 }
 
